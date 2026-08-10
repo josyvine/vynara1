@@ -9,6 +9,7 @@ import org.json.JSONObject;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import okhttp3.Call;
 import okhttp3.Callback;
@@ -31,7 +32,12 @@ public class GeminiApiClient {
     }
 
     public GeminiApiClient() {
-        this.client = new OkHttpClient.Builder().build();
+        // Phase 21 Alignment: Configure timeouts for heavy AI 3D scene generation tasks
+        this.client = new OkHttpClient.Builder()
+                .connectTimeout(30, TimeUnit.SECONDS)
+                .readTimeout(60, TimeUnit.SECONDS)
+                .writeTimeout(30, TimeUnit.SECONDS)
+                .build();
         this.mainHandler = new Handler(Looper.getMainLooper());
     }
 
@@ -79,15 +85,11 @@ public class GeminiApiClient {
                     }
 
                     if (modelList.isEmpty()) {
-                        modelList.add(new AIModel("gemini-3.5-flash", "gemini-3.5-flash", "Default fast model", true));
-                        modelList.add(new AIModel("gemini-3.1-pro-preview", "gemini-3.1-pro-preview", "Advanced reasoning model", true));
-                        modelList.add(new AIModel("gemini-3.1-flash-lite-preview", "gemini-3.1-flash-lite-preview", "Lite speed model", true));
                         modelList.add(new AIModel("gemini-2.5-flash", "gemini-2.5-flash", "Multimodal fast model", true));
                         modelList.add(new AIModel("gemini-2.5-pro", "gemini-2.5-pro", "Pro reasoning model", true));
+                        modelList.add(new AIModel("gemini-1.5-flash", "gemini-1.5-flash", "Fast model", true));
+                        modelList.add(new AIModel("gemini-1.5-pro", "gemini-1.5-pro", "Pro reasoning model", true));
                         modelList.add(new AIModel("gemini-2.5-flash-image", "gemini-2.5-flash-image", "Image generation model", true));
-                        modelList.add(new AIModel("gemini-3.1-flash-image-preview", "gemini-3.1-flash-image-preview", "High-quality image model", true));
-                        modelList.add(new AIModel("gemini-2.5-flash-preview-tts", "gemini-2.5-flash-preview-tts", "Text-to-speech model", true));
-                        modelList.add(new AIModel("veo-3.1-fast-generate-preview", "veo-3.1-fast-generate-preview", "Video generation model", true));
                     }
 
                     mainHandler.post(() -> callback.onSuccess(modelList));
@@ -113,6 +115,17 @@ public class GeminiApiClient {
     }
 
     public void generateContent(String apiKey, String modelId, String systemInstruction, String userPrompt, final ApiCallback<String> callback) {
+        generateContentInternal(apiKey, modelId, systemInstruction, userPrompt, false, callback);
+    }
+
+    /**
+     * Phase 2 Alignment: Generates structured JSON output by setting responseMimeType config.
+     */
+    public void generateStructuredJson(String apiKey, String modelId, String systemInstruction, String userPrompt, final ApiCallback<String> callback) {
+        generateContentInternal(apiKey, modelId, systemInstruction, userPrompt, true, callback);
+    }
+
+    private void generateContentInternal(String apiKey, String modelId, String systemInstruction, String userPrompt, boolean enforceJson, final ApiCallback<String> callback) {
         if (apiKey == null || apiKey.trim().isEmpty()) {
             callback.onError("Gemini API key is missing. Please configure it in Settings.");
             return;
@@ -145,6 +158,12 @@ public class GeminiApiClient {
             contents.put(userMsg);
             root.put("contents", contents);
 
+            if (enforceJson) {
+                JSONObject generationConfig = new JSONObject();
+                generationConfig.put("responseMimeType", "application/json");
+                root.put("generationConfig", generationConfig);
+            }
+
             RequestBody body = RequestBody.create(root.toString(), JSON);
             Request request = new Request.Builder().url(url).post(body).build();
 
@@ -175,8 +194,10 @@ public class GeminiApiClient {
                                 JSONArray resParts = content.optJSONArray("parts");
 
                                 if (resParts != null && resParts.length() > 0) {
-                                    final String textResult = resParts.getJSONObject(0).optString("text", "");
-                                    mainHandler.post(() -> callback.onSuccess(textResult));
+                                    String textResult = resParts.getJSONObject(0).optString("text", "");
+                                    textResult = cleanJsonOutput(textResult);
+                                    final String finalResult = textResult;
+                                    mainHandler.post(() -> callback.onSuccess(finalResult));
                                     return;
                                 }
                             }
@@ -192,5 +213,19 @@ public class GeminiApiClient {
         } catch (Exception e) {
             callback.onError("Error constructing Gemini request: " + e.getMessage());
         }
+    }
+
+    private String cleanJsonOutput(String input) {
+        if (input == null) return "";
+        String trimmed = input.trim();
+        if (trimmed.startsWith("```json")) {
+            trimmed = trimmed.substring(7);
+        } else if (trimmed.startsWith("```")) {
+            trimmed = trimmed.substring(3);
+        }
+        if (trimmed.endsWith("```")) {
+            trimmed = trimmed.substring(0, trimmed.length() - 3);
+        }
+        return trimmed.trim();
     }
 }
