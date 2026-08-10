@@ -1,5 +1,8 @@
 package com.example.ai;
 
+import com.example.ai.protocol.AIToolCall;
+import com.example.ai.protocol.AIProductionPlan;
+import com.example.ai.protocol.AIProductionRequest;
 import com.example.knowledge.KnowledgeEntry;
 import com.example.knowledge.KnowledgeManager;
 import com.example.tasks.ProductionPlan;
@@ -9,6 +12,7 @@ import com.example.tools.ToolOperation;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public class PromptInterpreter {
     private final KnowledgeManager knowledgeManager;
@@ -132,6 +136,49 @@ public class PromptInterpreter {
             t4.addDependency("t3");
 
             graph.addTask(t1); graph.addTask(t2); graph.addTask(t3); graph.addTask(t4);
+        }
+
+        return plan;
+    }
+
+    /**
+     * Phase 2 Alignment: Converts structured Gemini AI JSON specifications (AIProductionPlan)
+     * into a deterministic local execution plan with mapped task dependencies.
+     */
+    public ProductionPlan convertStructuredPlanToExecutablePlan(AIProductionRequest request, AIProductionPlan structuredPlan) {
+        if (structuredPlan == null || request == null) {
+            return createProductionPlan(request != null ? request.getUserPrompt() : "", "Photorealistic", "OpenGL ES / GLTF");
+        }
+
+        KnowledgeEntry knowledge = knowledgeManager.retrieveKnowledgeForPrompt(request.getUserPrompt());
+        String projectName = extractProjectName(request.getUserPrompt(), structuredPlan.getIntent());
+        ProductionPlan plan = new ProductionPlan(projectName, request.getUserPrompt(), structuredPlan.getIntent(), knowledge, request.getReferenceImageUris());
+        TaskGraph graph = plan.getTaskGraph();
+
+        List<AIToolCall> toolCalls = structuredPlan.getToolCalls();
+        if (toolCalls == null || toolCalls.isEmpty()) {
+            return createProductionPlan(request.getUserPrompt(), request.getStyle(), request.getTargetEngine(), request.getReferenceImageUris());
+        }
+
+        String previousTaskId = null;
+        for (int i = 0; i < toolCalls.size(); i++) {
+            AIToolCall call = toolCalls.get(i);
+            String taskId = "task_ai_" + (i + 1);
+            ToolOperation op = new ToolOperation(call.getToolId());
+            if (call.getParameters() != null) {
+                for (Map.Entry<String, Object> entry : call.getParameters().entrySet()) {
+                    op.setParam(entry.getKey(), entry.getValue());
+                }
+            }
+
+            TaskNode node = new TaskNode(taskId, call.getDescription() != null ? call.getDescription() : call.getToolId(), "AI Executing: " + call.getToolId(), op);
+            
+            if (previousTaskId != null) {
+                node.addDependency(previousTaskId);
+            }
+            
+            graph.addTask(node);
+            previousTaskId = taskId;
         }
 
         return plan;
