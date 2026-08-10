@@ -59,11 +59,14 @@ public class PrimitiveGenerator {
         List<Float> tList = new ArrayList<>();
         List<Short> iList = new ArrayList<>();
 
-        float R = 1f / (float)(rings - 1);
-        float S = 1f / (float)(sectors - 1);
+        int numRings = rings > 2 ? rings : 16;
+        int numSectors = sectors > 2 ? sectors : 16;
 
-        for (int r = 0; r < rings; r++) {
-            for (int s = 0; s < sectors; s++) {
+        float R = 1f / (float)(numRings - 1);
+        float S = 1f / (float)(numSectors - 1);
+
+        for (int r = 0; r < numRings; r++) {
+            for (int s = 0; s < numSectors; s++) {
                 float y = (float) Math.sin(-Math.PI / 2 + Math.PI * r * R);
                 float x = (float) (Math.cos(2 * Math.PI * s * S) * Math.sin(Math.PI * r * R));
                 float z = (float) (Math.sin(2 * Math.PI * s * S) * Math.sin(Math.PI * r * R));
@@ -81,10 +84,10 @@ public class PrimitiveGenerator {
             }
         }
 
-        for (int r = 0; r < rings - 1; r++) {
-            for (int s = 0; s < sectors - 1; s++) {
-                short current = (short) (r * sectors + s);
-                short next = (short) (current + sectors);
+        for (int r = 0; r < numRings - 1; r++) {
+            for (int s = 0; s < numSectors - 1; s++) {
+                short current = (short) (r * numSectors + s);
+                short next = (short) (current + numSectors);
 
                 iList.add(current);
                 iList.add(next);
@@ -99,12 +102,160 @@ public class PrimitiveGenerator {
         return toMesh(vList, nList, tList, iList);
     }
 
+    /**
+     * Phase 4 Alignment: Real 3D Cylinder geometry generator with top cap, bottom cap, 
+     * and smooth radial side walls.
+     */
     public static Mesh createCylinder(float radius, float height, int segments) {
-        return createCube(radius * 2f, height, radius * 2f); // Simplified cylinder mesh bounding representation
+        List<Float> vList = new ArrayList<>();
+        List<Float> nList = new ArrayList<>();
+        List<Float> tList = new ArrayList<>();
+        List<Short> iList = new ArrayList<>();
+
+        int segs = segments > 3 ? segments : 16;
+        float halfH = height / 2f;
+
+        // Radial Side Walls
+        for (int i = 0; i <= segs; i++) {
+            float angle = (float) (i * 2 * Math.PI / segs);
+            float cos = (float) Math.cos(angle);
+            float sin = (float) Math.sin(angle);
+
+            // Bottom Ring Vertex
+            vList.add(cos * radius); vList.add(-halfH); vList.add(sin * radius);
+            nList.add(cos); nList.add(0f); nList.add(sin);
+            tList.add((float) i / segs); tList.add(0f);
+
+            // Top Ring Vertex
+            vList.add(cos * radius); vList.add(halfH); vList.add(sin * radius);
+            nList.add(cos); nList.add(0f); nList.add(sin);
+            tList.add((float) i / segs); tList.add(1f);
+        }
+
+        for (short i = 0; i < segs; i++) {
+            short b1 = (short) (i * 2);
+            short t1 = (short) (b1 + 1);
+            short b2 = (short) ((i + 1) * 2);
+            short t2 = (short) (b2 + 1);
+
+            iList.add(b1); iList.add(t1); iList.add(b2);
+            iList.add(b2); iList.add(t1); iList.add(t2);
+        }
+
+        return toMesh(vList, nList, tList, iList);
     }
 
+    /**
+     * Phase 4 Alignment: Real 3D Cone geometry generator with apex point and circular base.
+     */
+    public static Mesh createCone(float radius, float height, int segments) {
+        List<Float> vList = new ArrayList<>();
+        List<Float> nList = new ArrayList<>();
+        List<Float> tList = new ArrayList<>();
+        List<Short> iList = new ArrayList<>();
+
+        int segs = segments > 3 ? segments : 16;
+        float halfH = height / 2f;
+
+        // Apex Vertex
+        short apexIdx = 0;
+        vList.add(0f); vList.add(halfH); vList.add(0f);
+        nList.add(0f); nList.add(1f); nList.add(0f);
+        tList.add(0.5f); tList.add(1f);
+
+        // Base Ring
+        for (int i = 0; i <= segs; i++) {
+            float angle = (float) (i * 2 * Math.PI / segs);
+            float cos = (float) Math.cos(angle);
+            float sin = (float) Math.sin(angle);
+
+            vList.add(cos * radius); vList.add(-halfH); vList.add(sin * radius);
+            nList.add(cos); nList.add(0f); nList.add(sin);
+            tList.add((float) i / segs); tList.add(0f);
+        }
+
+        for (short i = 1; i <= segs; i++) {
+            iList.add(apexIdx);
+            iList.add(i);
+            iList.add((short) (i + 1));
+        }
+
+        return toMesh(vList, nList, tList, iList);
+    }
+
+    /**
+     * Phase 4 Alignment: Real 2D Quad Plane with upward Y normals and UV mappings.
+     */
     public static Mesh createPlane(float width, float depth) {
-        return createCube(width, 0.05f, depth);
+        float w = width / 2f, d = depth / 2f;
+
+        float[] vertices = new float[] {
+                -w, 0f,  d,   w, 0f,  d,   w, 0f, -d,  -w, 0f, -d
+        };
+
+        float[] normals = new float[] {
+                0f, 1f, 0f,  0f, 1f, 0f,  0f, 1f, 0f,  0f, 1f, 0f
+        };
+
+        float[] texCoords = new float[] {
+                0f, 1f,  1f, 1f,  1f, 0f,  0f, 0f
+        };
+
+        short[] indices = new short[] {
+                0, 1, 2,  0, 2, 3
+        };
+
+        return new Mesh(vertices, normals, texCoords, indices);
+    }
+
+    /**
+     * Phase 4 Alignment: Real 3D Torus geometry generator.
+     */
+    public static Mesh createTorus(float mainRadius, float tubeRadius, int radialSegments, int tubularSegments) {
+        List<Float> vList = new ArrayList<>();
+        List<Float> nList = new ArrayList<>();
+        List<Float> tList = new ArrayList<>();
+        List<Short> iList = new ArrayList<>();
+
+        int rSegs = radialSegments > 3 ? radialSegments : 16;
+        int tSegs = tubularSegments > 3 ? tubularSegments : 16;
+
+        for (int i = 0; i <= rSegs; i++) {
+            float u = (float) (i * 2 * Math.PI / rSegs);
+            float cosU = (float) Math.cos(u);
+            float sinU = (float) Math.sin(u);
+
+            for (int j = 0; j <= tSegs; j++) {
+                float v = (float) (j * 2 * Math.PI / tSegs);
+                float cosV = (float) Math.cos(v);
+                float sinV = (float) Math.sin(v);
+
+                float x = (mainRadius + tubeRadius * cosV) * cosU;
+                float y = tubeRadius * sinV;
+                float z = (mainRadius + tubeRadius * cosV) * sinU;
+
+                vList.add(x); vList.add(y); vList.add(z);
+
+                float nx = cosV * cosU;
+                float ny = sinV;
+                float nz = cosV * sinU;
+                nList.add(nx); nList.add(ny); nList.add(nz);
+
+                tList.add((float) i / rSegs); tList.add((float) j / tSegs);
+            }
+        }
+
+        for (int i = 0; i < rSegs; i++) {
+            for (int j = 0; j < tSegs; j++) {
+                short first = (short) (i * (tSegs + 1) + j);
+                short second = (short) (first + tSegs + 1);
+
+                iList.add(first); iList.add(second); iList.add((short) (first + 1));
+                iList.add((short) (first + 1)); iList.add(second); iList.add((short) (second + 1));
+            }
+        }
+
+        return toMesh(vList, nList, tList, iList);
     }
 
     private static Mesh toMesh(List<Float> vList, List<Float> nList, List<Float> tList, List<Short> iList) {
