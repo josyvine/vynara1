@@ -1,6 +1,8 @@
 package com.example.tools;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class ToolRegistry {
@@ -20,14 +22,14 @@ public class ToolRegistry {
                 .addParam("depth", "FLOAT", false, "Depth dimension")
                 .addParam("radius", "FLOAT", false, "Radius size"));
 
-        // Geometry Procedural
+        // Geometry Procedural Structures
         register(new ToolDefinition("geometry.create_procedural", "Create Procedural Structure", "GEOMETRY",
                 "Generates procedural 3D models (house, villa, sofa, table, tree, car, pool, room).", ToolDefinition.AvailabilityState.AVAILABLE)
                 .addParam("type", "STRING", true, "house, villa, sofa, table, tree, car, pool, room")
                 .addParam("name", "STRING", false, "Display name for object")
                 .addParam("style", "STRING", false, "realistic, stylized, modern, low_poly"));
 
-        // Transforms
+        // Scene Graph Transformations & Node Controls
         register(new ToolDefinition("geometry.transform.translate", "Translate Object", "GEOMETRY",
                 "Translates 3D position of target object.", ToolDefinition.AvailabilityState.AVAILABLE)
                 .addParam("objectId", "STRING", true, "Target object ID")
@@ -49,13 +51,22 @@ public class ToolRegistry {
                 .addParam("scaleY", "FLOAT", true, "Y scale factor")
                 .addParam("scaleZ", "FLOAT", true, "Z scale factor"));
 
-        // Materials
+        register(new ToolDefinition("geometry.delete_object", "Delete Selected Object", "GEOMETRY",
+                "Deletes target object from scene graph hierarchy.", ToolDefinition.AvailabilityState.AVAILABLE)
+                .addParam("objectId", "STRING", false, "Target object ID"));
+
+        register(new ToolDefinition("geometry.duplicate_object", "Duplicate Object", "GEOMETRY",
+                "Duplicates target node and sub-mesh tree.", ToolDefinition.AvailabilityState.AVAILABLE)
+                .addParam("objectId", "STRING", false, "Target object ID"));
+
+        // PBR Material Shading
         register(new ToolDefinition("material.set_properties", "Set Material Properties", "MATERIAL",
                 "Sets PBR color, metallic, roughness, and opacity of object material.", ToolDefinition.AvailabilityState.AVAILABLE)
                 .addParam("objectId", "STRING", true, "Target object ID")
                 .addParam("colorHex", "STRING", false, "Base color hex string like #FF0000 or #1A2B3C")
                 .addParam("metallic", "FLOAT", false, "Metallic factor 0.0 to 1.0")
-                .addParam("roughness", "FLOAT", false, "Roughness factor 0.0 to 1.0"));
+                .addParam("roughness", "FLOAT", false, "Roughness factor 0.0 to 1.0")
+                .addParam("opacity", "FLOAT", false, "Opacity factor 0.0 to 1.0"));
 
         // Characters & Creatures
         register(new ToolDefinition("character.create_humanoid", "Create Humanoid Character", "CHARACTER",
@@ -79,13 +90,13 @@ public class ToolRegistry {
                 .addParam("characterId", "STRING", true, "Target character ID")
                 .addParam("limb", "STRING", true, "left_arm, right_arm, left_leg, right_leg"));
 
-        // Animation
+        // Animation Controls
         register(new ToolDefinition("animation.create_clip", "Create & Apply Animation Clip", "ANIMATION",
                 "Applies keyframed or procedural motion clip (walk, run, idle, crouch, fly, wave).", ToolDefinition.AvailabilityState.AVAILABLE)
                 .addParam("characterId", "STRING", true, "Target character ID")
                 .addParam("clipName", "STRING", true, "walk, run, idle, crouch, fly, wave"));
 
-        // Lighting & Camera
+        // Lighting & Viewport Camera
         register(new ToolDefinition("scene.add_light", "Add Light Source", "LIGHTING",
                 "Adds directional, point, or spot light to active scene.", ToolDefinition.AvailabilityState.AVAILABLE)
                 .addParam("type", "STRING", true, "directional, point, spot, ambient")
@@ -101,27 +112,52 @@ public class ToolRegistry {
                 .addParam("targetY", "FLOAT", false, "Look target Y")
                 .addParam("targetZ", "FLOAT", false, "Look target Z"));
 
-        // Validation & Export
+        // Transactions
+        register(new ToolDefinition("transaction.undo", "Undo Transaction", "TRANSACTION",
+                "Reverts the last scene operation.", ToolDefinition.AvailabilityState.AVAILABLE));
+
+        register(new ToolDefinition("transaction.redo", "Redo Transaction", "TRANSACTION",
+                "Re-applies the last undone scene operation.", ToolDefinition.AvailabilityState.AVAILABLE));
+
+        // Validation & Export Persistence
         register(new ToolDefinition("validation.check_mesh", "Validate Mesh & Rig", "VALIDATION",
                 "Inspects topology, vertex normals, skin weights, and bounding boxes.", ToolDefinition.AvailabilityState.AVAILABLE)
                 .addParam("objectId", "STRING", false, "Target object ID or null for entire scene"));
 
         register(new ToolDefinition("export.gltf", "Export Scene to GLTF/GLB", "EXPORT",
-                "Exports active 3D scene geometry, materials, and hierarchy to GLTF.", ToolDefinition.AvailabilityState.AVAILABLE)
+                "Exports active 3D scene geometry, materials, and hierarchy to GLTF/GLB.", ToolDefinition.AvailabilityState.AVAILABLE)
                 .addParam("filename", "STRING", false, "Export filename"));
+
+        register(new ToolDefinition("project.save", "Save Project to Disk", "STORAGE",
+                "Persists active scene graph and assets to local storage.", ToolDefinition.AvailabilityState.AVAILABLE));
     }
 
     public void register(ToolDefinition tool) {
-        registeredTools.put(tool.getId(), tool);
+        if (tool != null && tool.getId() != null) {
+            registeredTools.put(tool.getId(), tool);
+        }
     }
 
     public ToolDefinition getTool(String id) {
+        if (id == null) return null;
         return registeredTools.get(id);
     }
 
     public boolean isToolAvailable(String id) {
-        ToolDefinition t = registeredTools.get(id);
+        ToolDefinition t = getTool(id);
         return t != null && t.isAvailable();
+    }
+
+    public List<ToolDefinition> getToolsByCategory(String category) {
+        List<ToolDefinition> categoryTools = new ArrayList<>();
+        if (category == null) return categoryTools;
+
+        for (ToolDefinition tool : registeredTools.values()) {
+            if (category.equalsIgnoreCase(tool.getCategory())) {
+                categoryTools.add(tool);
+            }
+        }
+        return categoryTools;
     }
 
     public Map<String, ToolDefinition> getRegisteredTools() {
