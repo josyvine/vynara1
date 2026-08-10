@@ -8,10 +8,12 @@ public class Transform {
     private float sx = 1f, sy = 1f, sz = 1f;
 
     private final float[] modelMatrix = new float[16];
+    private final float[] worldMatrix = new float[16];
     private boolean isDirty = true;
 
     public Transform() {
         Matrix.setIdentityM(modelMatrix, 0);
+        Matrix.setIdentityM(worldMatrix, 0);
     }
 
     public void setPosition(float x, float y, float z) {
@@ -26,6 +28,29 @@ public class Transform {
 
     public void setScale(float x, float y, float z) {
         this.sx = x; this.sy = y; this.sz = z;
+        this.isDirty = true;
+    }
+
+    // Relative Incremental Transformations
+    public void translate(float dx, float dy, float dz) {
+        this.px += dx; this.py += dy; this.pz += dz;
+        this.isDirty = true;
+    }
+
+    public void rotate(float drx, float dry, float drz) {
+        this.rx += drx; this.ry += dry; this.rz += drz;
+        this.isDirty = true;
+    }
+
+    public void scaleBy(float dsx, float dsy, float dsz) {
+        this.sx *= dsx; this.sy *= dsy; this.sz *= dsz;
+        this.isDirty = true;
+    }
+
+    public void reset() {
+        this.px = 0f; this.py = 0f; this.pz = 0f;
+        this.rx = 0f; this.ry = 0f; this.rz = 0f;
+        this.sx = 1f; this.sy = 1f; this.sz = 1f;
         this.isDirty = true;
     }
 
@@ -50,5 +75,27 @@ public class Transform {
             isDirty = false;
         }
         return modelMatrix;
+    }
+
+    /**
+     * Phase 15 Alignment: Computes the global world matrix by multiplying
+     * parent node's world transform matrix with this node's local model matrix.
+     */
+    public float[] getWorldMatrix(float[] parentWorldMatrix) {
+        float[] localMat = getModelMatrix();
+        if (parentWorldMatrix == null) {
+            System.arraycopy(localMat, 0, worldMatrix, 0, 16);
+        } else {
+            Matrix.multiplyMM(worldMatrix, 0, parentWorldMatrix, 0, localMat, 0);
+        }
+        return worldMatrix;
+    }
+
+    public Transform cloneTransform() {
+        Transform copy = new Transform();
+        copy.setPosition(this.px, this.py, this.pz);
+        copy.setRotation(this.rx, this.ry, this.rz);
+        copy.setScale(this.sx, this.sy, this.sz);
+        return copy;
     }
 }
