@@ -5,15 +5,19 @@ import android.content.Context;
 import com.example.character.CharacterManager;
 import com.example.engine.ThreeDEngine;
 import com.example.knowledge.KnowledgeManager;
+import com.example.runtime.ProjectRuntime;
 import com.example.tasks.ExecutionEngine;
 import com.example.tasks.ProductionPlan;
-import com.example.tasks.TaskGraph;
-import com.example.tasks.TaskNode;
 import com.example.tools.ToolExecutor;
 import com.example.tools.ToolRegistry;
 import com.example.validation.ValidationManager;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class AIProductionController {
+    private final Context context;
+    private final ProjectRuntime runtime;
     private final ApiKeyManager apiKeyManager;
     private final GeminiApiClient apiClient;
     private final GeminiProvider geminiProvider;
@@ -29,32 +33,65 @@ public class AIProductionController {
     private ProductionPlan currentPlan;
 
     public AIProductionController(Context context) {
-        this.apiKeyManager = new ApiKeyManager(context);
+        this.context = context.getApplicationContext();
+        // Phase 1 Alignment: Connect to the unified ProjectRuntime instance to eliminate split engine instances
+        this.runtime = ProjectRuntime.getInstance(this.context);
+        this.apiKeyManager = new ApiKeyManager(this.context);
         this.apiClient = new GeminiApiClient();
         this.geminiProvider = new GeminiProvider(apiClient);
-        this.knowledgeManager = new KnowledgeManager();
-        this.toolRegistry = new ToolRegistry();
-        this.threeDEngine = new ThreeDEngine();
-        this.characterManager = new CharacterManager(threeDEngine);
-        this.validationManager = new ValidationManager();
-        this.toolExecutor = new ToolExecutor(threeDEngine, characterManager, validationManager);
-        this.executionEngine = new ExecutionEngine(toolExecutor);
+        
+        // Bind subsystems directly from the shared ProjectRuntime
+        this.knowledgeManager = runtime.getKnowledgeManager();
+        this.toolRegistry = runtime.getToolRegistry();
+        this.threeDEngine = runtime.getEngine();
+        this.characterManager = runtime.getCharacterManager();
+        this.validationManager = runtime.getValidationManager();
+        this.toolExecutor = runtime.getToolExecutor();
+        this.executionEngine = runtime.getExecutionEngine();
         this.orchestrator = new AIOrchestrator(apiClient, apiKeyManager, knowledgeManager);
     }
 
     public ProductionPlan generatePlan(String userPrompt, String style, String engine) {
-        currentPlan = orchestrator.planProduction(userPrompt, style, engine);
+        return generatePlan(userPrompt, style, engine, new ArrayList<>());
+    }
+
+    public ProductionPlan generatePlan(String userPrompt, String style, String engine, List<String> referenceImageUris) {
+        currentPlan = orchestrator.planProduction(userPrompt, style, engine, referenceImageUris);
         return currentPlan;
     }
 
     public void executeCurrentPlan(ExecutionEngine.ExecutionCallback callback) {
         if (currentPlan != null && currentPlan.getTaskGraph() != null) {
-            executionEngine.executeGraph(currentPlan.getTaskGraph(), callback);
+            // Phase 13 Alignment: Begin scene transaction for undo/redo rollback capability
+            runtime.getTransactionManager().beginTransaction("Execute AI Plan: " + currentPlan.getProjectName());
+            
+            executionEngine.executeGraph(currentPlan.getTaskGraph(), new ExecutionEngine.ExecutionCallback() {
+                @Override
+                public void onTaskUpdated(com.example.tasks.TaskNode node, com.example.tasks.TaskGraph graph) {
+                    if (callback != null) callback.onTaskUpdated(node, graph);
+                }
+
+                @Override
+                public void onGraphCompleted(com.example.tasks.TaskGraph graph) {
+                    // Commit transaction upon successful completion
+                    runtime.getTransactionManager().commitTransaction();
+                    if (callback != null) callback.onGraphCompleted(graph);
+                }
+
+                @Override
+                public void onError(String errorMessage) {
+                    // Rollback scene graph transaction on execution failure
+                    runtime.getTransactionManager().rollbackTransaction();
+                    if (callback != null) callback.onError(errorMessage);
+                }
+            });
         } else {
             if (callback != null) callback.onError("No active production plan to execute.");
         }
     }
 
+    public Context getContext() { return context; }
+    public ProjectRuntime getRuntime() { return runtime; }
     public ApiKeyManager getApiKeyManager() { return apiKeyManager; }
     public GeminiApiClient getApiClient() { return apiClient; }
     public GeminiProvider getGeminiProvider() { return geminiProvider; }
