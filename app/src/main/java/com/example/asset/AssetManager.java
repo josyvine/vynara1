@@ -7,22 +7,80 @@ public class AssetManager {
     private final List<Asset> assets = new ArrayList<>();
 
     public AssetManager() {
-        populateDefaultAssets();
+        // Phase 15 Alignment: Purged hardcoded mock sample assets.
+        // The asset library is populated dynamically from generated 3D files stored locally.
     }
 
-    private void populateDefaultAssets() {
-        assets.add(new Asset("asset_1", "Base Humanoid Mesh", "MESH", "GLTF", "2.4 MB"));
-        assets.add(new Asset("asset_2", "Humanoid Biped Rig", "SKELETON", "GLTF", "420 KB"));
-        assets.add(new Asset("asset_3", "Quadruped Dog Skeleton", "SKELETON", "GLTF", "380 KB"));
-        assets.add(new Asset("asset_4", "Biped Walk Cycle Animation", "ANIMATION", "GLTF", "180 KB"));
-        assets.add(new Asset("asset_5", "PBR Dark Walnut Material", "MATERIAL", "PBR", "1.1 MB"));
-        assets.add(new Asset("asset_6", "PBR Brown Leather Material", "MATERIAL", "PBR", "1.8 MB"));
-        assets.add(new Asset("asset_7", "Clear Pool Water Shading", "MATERIAL", "PBR", "350 KB"));
+    public void setAssets(List<Asset> loadedAssets) {
+        assets.clear();
+        if (loadedAssets != null) {
+            assets.addAll(loadedAssets);
+        }
     }
 
-    public List<Asset> getAssets() { return assets; }
+    public List<Asset> getAssets() { 
+        return assets; 
+    }
 
     public void addAsset(Asset a) {
-        if (a != null) assets.add(0, a);
+        if (a != null && !containsAsset(a.getId())) {
+            assets.add(0, a); // Add newest generated assets to the top
+        }
+    }
+
+    public boolean removeAsset(String assetId) {
+        if (assetId == null || assetId.trim().isEmpty()) {
+            return false;
+        }
+        return assets.removeIf(a -> a.getId().equals(assetId));
+    }
+
+    public Asset getAssetById(String assetId) {
+        if (assetId == null || assetId.trim().isEmpty()) {
+            return null;
+        }
+        for (Asset a : assets) {
+            if (a.getId().equals(assetId)) {
+                return a;
+            }
+        }
+        return null;
+    }
+
+    public boolean containsAsset(String assetId) {
+        return getAssetById(assetId) != null;
+    }
+
+    public List<Asset> getAssetsByCategory(String category) {
+        List<Asset> filtered = new ArrayList<>();
+        if (category == null || category.trim().isEmpty() || "ALL".equalsIgnoreCase(category)) {
+            return new ArrayList<>(assets);
+        }
+        for (Asset a : assets) {
+            if (category.equalsIgnoreCase(a.getCategory())) {
+                filtered.add(a);
+            }
+        }
+        return filtered;
+    }
+
+    public List<Asset> searchAssets(String query) {
+        List<Asset> results = new ArrayList<>();
+        if (query == null || query.trim().isEmpty()) {
+            return new ArrayList<>(assets);
+        }
+        String q = query.toLowerCase().trim();
+        for (Asset a : assets) {
+            if ((a.getName() != null && a.getName().toLowerCase().contains(q)) ||
+                (a.getCategory() != null && a.getCategory().toLowerCase().contains(q)) ||
+                (a.getFormat() != null && a.getFormat().toLowerCase().contains(q))) {
+                results.add(a);
+            }
+        }
+        return results;
+    }
+
+    public void clearAssets() {
+        assets.clear();
     }
 }
