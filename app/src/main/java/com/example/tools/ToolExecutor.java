@@ -6,6 +6,7 @@ import com.example.character.CharacterSpecification;
 import com.example.engine.Material;
 import com.example.engine.SceneObject;
 import com.example.engine.ThreeDEngine;
+import com.example.export.GLTFExporter;
 import com.example.validation.ValidationManager;
 import com.example.validation.ValidationResult;
 
@@ -25,7 +26,7 @@ public class ToolExecutor {
     public boolean executeOperation(ToolOperation op) {
         if (op == null || op.getToolId() == null) return false;
 
-        String id = op.getToolId().toLowerCase();
+        String id = op.getToolId().toLowerCase().trim();
 
         switch (id) {
             case "geometry.create_primitive": {
@@ -33,15 +34,15 @@ public class ToolExecutor {
                 float w = op.getFloatParam("width", 1.5f);
                 float h = op.getFloatParam("height", 1.5f);
                 float d = op.getFloatParam("depth", 1.5f);
-                engine.createPrimitive(type, w, h, d);
-                return true;
+                SceneObject obj = engine.createPrimitive(type, w, h, d);
+                return obj != null;
             }
 
             case "geometry.create_procedural": {
                 String type = op.getStringParam("type", "house");
                 String name = op.getStringParam("name", type.toUpperCase());
-                engine.createProceduralStructure(type, name);
-                return true;
+                SceneObject obj = engine.createProceduralStructure(type, name);
+                return obj != null;
             }
 
             case "geometry.transform.translate": {
@@ -83,6 +84,25 @@ public class ToolExecutor {
                 return false;
             }
 
+            case "geometry.delete_object": {
+                String objId = op.getStringParam("objectId", null);
+                if (objId != null) {
+                    engine.getSceneManager().getActiveScene().removeObject(objId);
+                    return true;
+                }
+                return engine.getSceneManager().deleteSelectedObject();
+            }
+
+            case "geometry.duplicate_object": {
+                String objId = op.getStringParam("objectId", null);
+                SceneObject target = findTargetObject(objId);
+                if (target != null) {
+                    SceneObject copy = engine.getSceneManager().duplicateObject(target);
+                    return copy != null;
+                }
+                return false;
+            }
+
             case "material.set_properties": {
                 String objId = op.getStringParam("objectId", null);
                 SceneObject obj = findTargetObject(objId);
@@ -90,14 +110,26 @@ public class ToolExecutor {
                     String color = op.getStringParam("colorHex", "#00E5FF");
                     float metallic = op.getFloatParam("metallic", 0.1f);
                     float roughness = op.getFloatParam("roughness", 0.5f);
+                    float opacity = op.getFloatParam("opacity", 1.0f);
 
                     Material mat = new Material("mat_" + System.currentTimeMillis(), "Custom Mat", color);
                     mat.setMetallic(metallic);
                     mat.setRoughness(roughness);
+                    mat.setOpacity(opacity);
                     obj.setMaterial(mat);
                     return true;
                 }
                 return false;
+            }
+
+            case "material.create": {
+                String name = op.getStringParam("name", "New Material");
+                String color = op.getStringParam("colorHex", "#FFFFFF");
+                float metallic = op.getFloatParam("metallic", 0.0f);
+                float roughness = op.getFloatParam("roughness", 0.5f);
+
+                Material mat = engine.getMaterialManager().createCustomPBRMaterial(name, color, metallic, roughness);
+                return mat != null;
             }
 
             case "character.create_humanoid": {
@@ -108,8 +140,8 @@ public class ToolExecutor {
                 CharacterSpecification spec = new CharacterSpecification("HUMANOID", name)
                         .setHeight(height)
                         .setStyle(style);
-                characterManager.createHumanoid(spec);
-                return true;
+                Character c = characterManager.createHumanoid(spec);
+                return c != null;
             }
 
             case "character.create_creature": {
@@ -117,38 +149,54 @@ public class ToolExecutor {
                 String name = op.getStringParam("name", species.toUpperCase());
 
                 CharacterSpecification spec = new CharacterSpecification(species, name);
-                characterManager.createCreature(spec);
-                return true;
+                Character c = characterManager.createCreature(spec);
+                return c != null;
             }
 
             case "skeleton.bind": {
                 String charId = op.getStringParam("characterId", null);
                 Character c = characterManager.getCharacter(charId);
+                if (c == null && !characterManager.getCharacterMap().isEmpty()) {
+                    c = characterManager.getCharacterMap().values().iterator().next();
+                }
                 if (c != null && c.getSkin() != null) {
                     c.getSkin().normalizeWeights();
                     return true;
                 }
-                return true; // Default fallback
+                return true;
             }
 
             case "rig.create_ik": {
                 String charId = op.getStringParam("characterId", null);
                 String limb = op.getStringParam("limb", "left_arm");
+                float targetX = op.getFloatParam("x", 0.5f);
+                float targetY = op.getFloatParam("y", 1.2f);
+                float targetZ = op.getFloatParam("z", 0.3f);
+
                 Character c = characterManager.getCharacter(charId);
-                if (c != null && c.getRig() != null) {
-                    c.getRig().setIKTarget(limb, 0.5f, 1.2f, 0.3f);
+                if (c == null && !characterManager.getCharacterMap().isEmpty()) {
+                    c = characterManager.getCharacterMap().values().iterator().next();
                 }
-                return true;
+                if (c != null && c.getRig() != null) {
+                    c.getRig().setIKTarget(limb, targetX, targetY, targetZ);
+                    return true;
+                }
+                return false;
             }
 
             case "animation.create_clip": {
                 String charId = op.getStringParam("characterId", null);
                 String clip = op.getStringParam("clipName", "walk");
+
                 Character c = characterManager.getCharacter(charId);
+                if (c == null && !characterManager.getCharacterMap().isEmpty()) {
+                    c = characterManager.getCharacterMap().values().iterator().next();
+                }
                 if (c != null && c.getAnimationPlayer() != null) {
                     c.getAnimationPlayer().playClip(clip);
+                    return true;
                 }
-                return true;
+                return false;
             }
 
             case "scene.add_light": {
@@ -158,6 +206,7 @@ public class ToolExecutor {
 
                 com.example.engine.Light light = new com.example.engine.Light("light_" + System.currentTimeMillis(),
                         "point".equalsIgnoreCase(typeStr) ? com.example.engine.Light.Type.POINT : com.example.engine.Light.Type.DIRECTIONAL);
+                light.setColorHex(color);
                 light.setIntensity(intensity);
                 engine.getLightManager().addLight(light);
                 return true;
@@ -167,13 +216,24 @@ public class ToolExecutor {
                 float x = op.getFloatParam("posX", 0f);
                 float y = op.getFloatParam("posY", 4f);
                 float z = op.getFloatParam("posZ", 8f);
+                float tx = op.getFloatParam("targetX", 0f);
+                float ty = op.getFloatParam("targetY", 1f);
+                float tz = op.getFloatParam("targetZ", 0f);
+
                 engine.getCameraManager().getActiveCamera().setEye(x, y, z);
+                engine.getCameraManager().getActiveCamera().setTarget(tx, ty, tz);
                 return true;
             }
 
             case "validation.check_mesh": {
+                if (validationManager == null || engine == null) return false;
                 List<ValidationResult> results = validationManager.validateScene(engine.getSceneManager().getActiveScene());
-                return !results.isEmpty();
+                return results != null;
+            }
+
+            case "export.gltf": {
+                String gltfJson = GLTFExporter.exportSceneToGLTFJson(engine.getSceneManager().getActiveScene());
+                return gltfJson != null && !gltfJson.contains("error");
             }
 
             default:
@@ -186,11 +246,14 @@ public class ToolExecutor {
             SceneObject target = engine.getSceneManager().getActiveScene().findObjectById(objId);
             if (target != null) return target;
         }
-        // Fallback to selected object or first scene object
         if (engine.getSceneManager().getSelectedObject() != null) {
             return engine.getSceneManager().getSelectedObject();
         }
         List<SceneObject> objs = engine.getSceneManager().getActiveScene().getObjects();
         return objs.isEmpty() ? null : objs.get(0);
     }
+
+    public ThreeDEngine getEngine() { return engine; }
+    public CharacterManager getCharacterManager() { return characterManager; }
+    public ValidationManager getValidationManager() { return validationManager; }
 }
