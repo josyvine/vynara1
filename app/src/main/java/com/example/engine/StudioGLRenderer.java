@@ -22,11 +22,17 @@ public class StudioGLRenderer implements GLSurfaceView.Renderer {
     private int uColorHandle;
     private int uLightPosHandle;
     private int uLightColorHandle;
+    private int uAmbientColorHandle;
+    private int uCameraPosHandle;
+    private int uMetallicHandle;
+    private int uRoughnessHandle;
+    private int uEmissionHandle;
+    private int uIsSelectedHandle;
 
     private int aPositionHandle;
     private int aNormalHandle;
 
-    // Grid Buffer
+    // Studio Grid Buffer
     private FloatBuffer gridBuffer;
     private int gridVertexCount = 0;
 
@@ -41,7 +47,7 @@ public class StudioGLRenderer implements GLSurfaceView.Renderer {
             "varying vec3 vFragPos;\n" +
             "void main() {\n" +
             "    vFragPos = vec3(uModelMatrix * aPosition);\n" +
-            "    vNormal = vec3(uModelMatrix * vec4(aNormal, 0.0));\n" +
+            "    vNormal = normalize(mat3(uModelMatrix) * aNormal);\n" +
             "    gl_Position = uMVPMatrix * aPosition;\n" +
             "}\n";
 
@@ -52,12 +58,37 @@ public class StudioGLRenderer implements GLSurfaceView.Renderer {
             "uniform vec4 uColor;\n" +
             "uniform vec3 uLightPos;\n" +
             "uniform vec3 uLightColor;\n" +
+            "uniform vec3 uAmbientColor;\n" +
+            "uniform vec3 uCameraPos;\n" +
+            "uniform float uMetallic;\n" +
+            "uniform float uRoughness;\n" +
+            "uniform vec4 uEmission;\n" +
+            "uniform float uIsSelected;\n" +
             "void main() {\n" +
             "    vec3 norm = normalize(vNormal);\n" +
             "    vec3 lightDir = normalize(uLightPos - vFragPos);\n" +
-            "    float diff = max(dot(norm, lightDir), 0.3);\n" +
+            "    vec3 viewDir = normalize(uCameraPos - vFragPos);\n" +
+            "    vec3 halfDir = normalize(lightDir + viewDir);\n" +
+            "    \n" +
+            "    // Diffuse Reflection\n" +
+            "    float diff = max(dot(norm, lightDir), 0.0);\n" +
             "    vec3 diffuse = diff * uLightColor;\n" +
-            "    vec3 finalColor = uColor.rgb * (diffuse + vec3(0.2));\n" +
+            "    \n" +
+            "    // Specular Reflection (Cook-Torrance Approximation)\n" +
+            "    float specAngle = max(dot(norm, halfDir), 0.0);\n" +
+            "    float specPower = mix(8.0, 128.0, 1.0 - uRoughness);\n" +
+            "    float spec = pow(specAngle, specPower) * uMetallic;\n" +
+            "    vec3 specular = spec * uLightColor;\n" +
+            "    \n" +
+            "    // Ambient & Emission\n" +
+            "    vec3 ambient = uAmbientColor * uColor.rgb;\n" +
+            "    vec3 finalColor = ambient + uColor.rgb * diffuse + specular + uEmission.rgb * uEmission.a;\n" +
+            "    \n" +
+            "    // Cyan Highlight Overlay when Selected\n" +
+            "    if (uIsSelected > 0.5) {\n" +
+            "        finalColor = mix(finalColor, vec3(0.0, 0.9, 1.0), 0.4);\n" +
+            "    }\n" +
+            "    \n" +
             "    gl_FragColor = vec4(finalColor, uColor.a);\n" +
             "}\n";
 
@@ -69,7 +100,7 @@ public class StudioGLRenderer implements GLSurfaceView.Renderer {
     }
 
     private void initGridBuffer() {
-        int gridSize = 10;
+        int gridSize = 12;
         float[] gridVertices = new float[(gridSize * 2 + 1) * 4 * 3];
         int idx = 0;
         for (int i = -gridSize; i <= gridSize; i++) {
@@ -93,6 +124,8 @@ public class StudioGLRenderer implements GLSurfaceView.Renderer {
     public void onSurfaceCreated(GL10 gl, EGLConfig config) {
         GLES20.glClearColor(0.07f, 0.08f, 0.11f, 1.0f); // Dark studio canvas #12131C
         GLES20.glEnable(GLES20.GL_DEPTH_TEST);
+        GLES20.glEnable(GLES20.GL_BLEND);
+        GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA);
 
         int vertexShader = loadShader(GLES20.GL_VERTEX_SHADER, vertexShaderCode);
         int fragmentShader = loadShader(GLES20.GL_FRAGMENT_SHADER, fragmentShaderCode);
@@ -107,6 +140,12 @@ public class StudioGLRenderer implements GLSurfaceView.Renderer {
         uColorHandle = GLES20.glGetUniformLocation(programHandle, "uColor");
         uLightPosHandle = GLES20.glGetUniformLocation(programHandle, "uLightPos");
         uLightColorHandle = GLES20.glGetUniformLocation(programHandle, "uLightColor");
+        uAmbientColorHandle = GLES20.glGetUniformLocation(programHandle, "uAmbientColor");
+        uCameraPosHandle = GLES20.glGetUniformLocation(programHandle, "uCameraPos");
+        uMetallicHandle = GLES20.glGetUniformLocation(programHandle, "uMetallic");
+        uRoughnessHandle = GLES20.glGetUniformLocation(programHandle, "uRoughness");
+        uEmissionHandle = GLES20.glGetUniformLocation(programHandle, "uEmission");
+        uIsSelectedHandle = GLES20.glGetUniformLocation(programHandle, "uIsSelected");
 
         aPositionHandle = GLES20.glGetAttribLocation(programHandle, "aPosition");
         aNormalHandle = GLES20.glGetAttribLocation(programHandle, "aNormal");
@@ -126,25 +165,42 @@ public class StudioGLRenderer implements GLSurfaceView.Renderer {
         Camera camera = cameraManager.getActiveCamera();
         float[] viewMatrix = camera.getViewMatrix();
         float[] projMatrix = camera.getProjectionMatrix();
+        float[] cameraEye = camera.getEye();
 
-        // Setup Light
-        if (!lightManager.getLights().isEmpty()) {
-            Light mainLight = lightManager.getLights().get(0);
+        GLES20.glUniform3fv(uCameraPosHandle, 1, cameraEye, 0);
+
+        // Bind Lighting Uniforms
+        Light mainLight = lightManager.getPrimaryDirectionalLight();
+        Light ambientLight = lightManager.getAmbientLight();
+
+        if (mainLight != null) {
             GLES20.glUniform3fv(uLightPosHandle, 1, mainLight.getPosition(), 0);
-            GLES20.glUniform3fv(uLightColorHandle, 1, mainLight.getColorRGB(), 0);
+            GLES20.glUniform3f(uLightColorHandle, 
+                    mainLight.getColorRGB()[0] * mainLight.getIntensity(),
+                    mainLight.getColorRGB()[1] * mainLight.getIntensity(),
+                    mainLight.getColorRGB()[2] * mainLight.getIntensity());
         } else {
-            GLES20.glUniform3f(uLightPosHandle, 5f, 10f, 5f);
+            GLES20.glUniform3f(uLightPosHandle, 8f, 15f, 10f);
             GLES20.glUniform3f(uLightColorHandle, 1f, 1f, 1f);
         }
 
-        // Draw Grid Ground
+        if (ambientLight != null) {
+            GLES20.glUniform3f(uAmbientColorHandle, 
+                    ambientLight.getColorRGB()[0] * ambientLight.getIntensity(),
+                    ambientLight.getColorRGB()[1] * ambientLight.getIntensity(),
+                    ambientLight.getColorRGB()[2] * ambientLight.getIntensity());
+        } else {
+            GLES20.glUniform3f(uAmbientColorHandle, 0.3f, 0.3f, 0.35f);
+        }
+
+        // Render Ground Grid
         drawGrid(viewMatrix, projMatrix);
 
-        // Draw Scene Objects
+        // Render Active 3D Scene Graph Nodes
         Scene scene = sceneManager.getActiveScene();
         if (scene != null) {
             for (SceneObject obj : scene.getObjects()) {
-                drawSceneObject(obj, viewMatrix, projMatrix);
+                drawSceneObject(obj, viewMatrix, projMatrix, null);
             }
         }
     }
@@ -158,7 +214,11 @@ public class StudioGLRenderer implements GLSurfaceView.Renderer {
 
         GLES20.glUniformMatrix4fv(uMVPMatrixHandle, 1, false, mvpMatrix, 0);
         GLES20.glUniformMatrix4fv(uModelMatrixHandle, 1, false, identity, 0);
-        GLES20.glUniform4f(uColorHandle, 0.2f, 0.25f, 0.35f, 0.5f); // Subtle grid color
+        GLES20.glUniform4f(uColorHandle, 0.2f, 0.25f, 0.35f, 0.5f);
+        GLES20.glUniform1f(uMetallicHandle, 0.0f);
+        GLES20.glUniform1f(uRoughnessHandle, 1.0f);
+        GLES20.glUniform4f(uEmissionHandle, 0f, 0f, 0f, 0f);
+        GLES20.glUniform1f(uIsSelectedHandle, 0.0f);
 
         GLES20.glEnableVertexAttribArray(aPositionHandle);
         GLES20.glVertexAttribPointer(aPositionHandle, 3, GLES20.GL_FLOAT, false, 0, gridBuffer);
@@ -166,54 +226,65 @@ public class StudioGLRenderer implements GLSurfaceView.Renderer {
         GLES20.glDisableVertexAttribArray(aPositionHandle);
     }
 
-    private void drawSceneObject(SceneObject obj, float[] viewMatrix, float[] projMatrix) {
-        if (!obj.isVisible() || obj.getMesh() == null) return;
+    private void drawSceneObject(SceneObject obj, float[] viewMatrix, float[] projMatrix, float[] parentWorldMatrix) {
+        if (!obj.isVisible()) return;
 
         Mesh mesh = obj.getMesh();
         Transform transform = obj.getTransform();
-        float[] modelMatrix = transform.getModelMatrix();
+        float[] modelMatrix = transform.getWorldMatrix(parentWorldMatrix);
 
-        Matrix.multiplyMM(mvpMatrix, 0, viewMatrix, 0, modelMatrix, 0);
-        Matrix.multiplyMM(mvpMatrix, 0, projMatrix, 0, mvpMatrix, 0);
+        if (mesh != null) {
+            Matrix.multiplyMM(mvpMatrix, 0, viewMatrix, 0, modelMatrix, 0);
+            Matrix.multiplyMM(mvpMatrix, 0, projMatrix, 0, mvpMatrix, 0);
 
-        GLES20.glUniformMatrix4fv(uMVPMatrixHandle, 1, false, mvpMatrix, 0);
-        GLES20.glUniformMatrix4fv(uModelMatrixHandle, 1, false, modelMatrix, 0);
+            GLES20.glUniformMatrix4fv(uMVPMatrixHandle, 1, false, mvpMatrix, 0);
+            GLES20.glUniformMatrix4fv(uModelMatrixHandle, 1, false, modelMatrix, 0);
 
-        Material mat = obj.getMaterial();
-        if (mat != null) {
-            float[] color = mat.getBaseColorRGBA();
-            if (obj.isSelected()) {
-                GLES20.glUniform4f(uColorHandle, 0f, 0.9f, 1f, 1f); // Cyan highlight when selected
-            } else {
+            // Bind Material Uniforms
+            Material mat = obj.getMaterial();
+            if (mat != null) {
+                float[] color = mat.getBaseColorRGBA();
                 GLES20.glUniform4f(uColorHandle, color[0], color[1], color[2], color[3]);
+                GLES20.glUniform1f(uMetallicHandle, mat.getMetallic());
+                GLES20.glUniform1f(uRoughnessHandle, mat.getRoughness());
+                
+                float[] emissiveRGB = mat.getEmissionRGB();
+                GLES20.glUniform4f(uEmissionHandle, emissiveRGB[0], emissiveRGB[1], emissiveRGB[2], mat.getEmissionIntensity());
+            } else {
+                GLES20.glUniform4f(uColorHandle, 0.8f, 0.8f, 0.8f, 1f);
+                GLES20.glUniform1f(uMetallicHandle, 0.1f);
+                GLES20.glUniform1f(uRoughnessHandle, 0.5f);
+                GLES20.glUniform4f(uEmissionHandle, 0f, 0f, 0f, 0f);
             }
-        } else {
-            GLES20.glUniform4f(uColorHandle, 0.8f, 0.8f, 0.8f, 1f);
+
+            GLES20.glUniform1f(uIsSelectedHandle, obj.isSelected() ? 1.0f : 0.0f);
+
+            // Bind Buffers & Draw Mesh
+            if (mesh.getVertexBuffer() != null) {
+                GLES20.glEnableVertexAttribArray(aPositionHandle);
+                GLES20.glVertexAttribPointer(aPositionHandle, 3, GLES20.GL_FLOAT, false, 0, mesh.getVertexBuffer());
+            }
+
+            if (mesh.getNormalBuffer() != null) {
+                GLES20.glEnableVertexAttribArray(aNormalHandle);
+                GLES20.glVertexAttribPointer(aNormalHandle, 3, GLES20.GL_FLOAT, false, 0, mesh.getNormalBuffer());
+            }
+
+            if (mesh.getIndexBuffer() != null) {
+                GLES20.glDrawElements(GLES20.GL_TRIANGLES, mesh.getIndices().length, GLES20.GL_UNSIGNED_SHORT, mesh.getIndexBuffer());
+            } else if (mesh.getVertexBuffer() != null) {
+                GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, mesh.getVertexCount());
+            }
+
+            GLES20.glDisableVertexAttribArray(aPositionHandle);
+            GLES20.glDisableVertexAttribArray(aNormalHandle);
         }
 
-        // Draw Mesh
-        if (mesh.getVertexBuffer() != null) {
-            GLES20.glEnableVertexAttribArray(aPositionHandle);
-            GLES20.glVertexAttribPointer(aPositionHandle, 3, GLES20.GL_FLOAT, false, 0, mesh.getVertexBuffer());
-        }
-
-        if (mesh.getNormalBuffer() != null) {
-            GLES20.glEnableVertexAttribArray(aNormalHandle);
-            GLES20.glVertexAttribPointer(aNormalHandle, 3, GLES20.GL_FLOAT, false, 0, mesh.getNormalBuffer());
-        }
-
-        if (mesh.getIndexBuffer() != null) {
-            GLES20.glDrawElements(GLES20.GL_TRIANGLES, mesh.getIndices().length, GLES20.GL_UNSIGNED_SHORT, mesh.getIndexBuffer());
-        } else if (mesh.getVertexBuffer() != null) {
-            GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, mesh.getVertexCount());
-        }
-
-        GLES20.glDisableVertexAttribArray(aPositionHandle);
-        GLES20.glDisableVertexAttribArray(aNormalHandle);
-
-        // Render Children
-        for (SceneObject child : obj.getChildren()) {
-            drawSceneObject(child, viewMatrix, projMatrix);
+        // Recursively Render Scene Graph Children Nodes
+        if (obj.getChildren() != null) {
+            for (SceneObject child : obj.getChildren()) {
+                drawSceneObject(child, viewMatrix, projMatrix, modelMatrix);
+            }
         }
     }
 
