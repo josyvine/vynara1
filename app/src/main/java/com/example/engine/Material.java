@@ -6,8 +6,19 @@ public class Material {
     private String id;
     private String name;
     private float[] baseColorRGBA = new float[] { 0.8f, 0.8f, 0.8f, 1.0f };
+    private float[] emissionRGB = new float[] { 0.0f, 0.0f, 0.0f };
+    private float emissionIntensity = 0.0f;
     private float metallic = 0.1f;
     private float roughness = 0.5f;
+    private float opacity = 1.0f;
+    private float ambientOcclusion = 1.0f;
+
+    // Texture Map URI / Asset ID References
+    private String albedoTextureMap;
+    private String normalMap;
+    private String roughnessMap;
+    private String metallicMap;
+    private String aoMap;
 
     public Material(String id, String name, String hexColor) {
         this.id = id;
@@ -24,11 +35,40 @@ public class Material {
     public String getId() { return id; }
     public String getName() { return name; }
     public float[] getBaseColorRGBA() { return baseColorRGBA; }
+    public float[] getEmissionRGB() { return emissionRGB; }
+    public float getEmissionIntensity() { return emissionIntensity; }
     public float getMetallic() { return metallic; }
     public float getRoughness() { return roughness; }
+    public float getOpacity() { return opacity; }
+    public float getAmbientOcclusion() { return ambientOcclusion; }
 
-    public void setMetallic(float metallic) { this.metallic = metallic; }
-    public void setRoughness(float roughness) { this.roughness = roughness; }
+    public String getAlbedoTextureMap() { return albedoTextureMap; }
+    public String getNormalMap() { return normalMap; }
+    public String getRoughnessMap() { return roughnessMap; }
+    public String getMetallicMap() { return metallicMap; }
+    public String getAoMap() { return aoMap; }
+
+    public void setName(String name) { this.name = name; }
+    public void setMetallic(float metallic) { this.metallic = Math.max(0.0f, Math.min(1.0f, metallic)); }
+    public void setRoughness(float roughness) { this.roughness = Math.max(0.0f, Math.min(1.0f, roughness)); }
+    public void setOpacity(float opacity) { 
+        this.opacity = Math.max(0.0f, Math.min(1.0f, opacity)); 
+        this.baseColorRGBA[3] = this.opacity;
+    }
+    public void setAmbientOcclusion(float ao) { this.ambientOcclusion = Math.max(0.0f, Math.min(1.0f, ao)); }
+
+    public void setEmission(float r, float g, float b, float intensity) {
+        this.emissionRGB[0] = r;
+        this.emissionRGB[1] = g;
+        this.emissionRGB[2] = b;
+        this.emissionIntensity = Math.max(0.0f, intensity);
+    }
+
+    public void setAlbedoTextureMap(String textureUri) { this.albedoTextureMap = textureUri; }
+    public void setNormalMap(String normalUri) { this.normalMap = normalUri; }
+    public void setRoughnessMap(String roughnessUri) { this.roughnessMap = roughnessUri; }
+    public void setMetallicMap(String metallicUri) { this.metallicMap = metallicUri; }
+    public void setAoMap(String aoUri) { this.aoMap = aoUri; }
 
     public void setColorHex(String hexColor) {
         if (hexColor != null && !hexColor.isEmpty()) {
@@ -37,8 +77,23 @@ public class Material {
                 baseColorRGBA[0] = Color.red(c) / 255f;
                 baseColorRGBA[1] = Color.green(c) / 255f;
                 baseColorRGBA[2] = Color.blue(c) / 255f;
-                baseColorRGBA[3] = Color.alpha(c) / 255f;
+                baseColorRGBA[3] = (Color.alpha(c) / 255f) * opacity;
             } catch (Exception ignored) {}
         }
+    }
+
+    public Material cloneMaterial(String newId, String newName) {
+        Material copy = new Material(newId, newName, baseColorRGBA[0], baseColorRGBA[1], baseColorRGBA[2], baseColorRGBA[3]);
+        copy.setMetallic(this.metallic);
+        copy.setRoughness(this.roughness);
+        copy.setOpacity(this.opacity);
+        copy.setAmbientOcclusion(this.ambientOcclusion);
+        copy.setEmission(this.emissionRGB[0], this.emissionRGB[1], this.emissionRGB[2], this.emissionIntensity);
+        copy.setAlbedoTextureMap(this.albedoTextureMap);
+        copy.setNormalMap(this.normalMap);
+        copy.setRoughnessMap(this.roughnessMap);
+        copy.setMetallicMap(this.metallicMap);
+        copy.setAoMap(this.aoMap);
+        return copy;
     }
 }
