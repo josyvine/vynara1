@@ -3,15 +3,31 @@ package com.example.ai;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import androidx.security.crypto.EncryptedSharedPreferences;
+import androidx.security.crypto.MasterKeys;
+
 public class ApiKeyManager {
     private static final String PREF_NAME = "vynara_secure_prefs";
     private static final String KEY_GEMINI_API_KEY = "gemini_api_key";
     private static final String KEY_SELECTED_MODEL = "selected_gemini_model";
 
-    private final SharedPreferences prefs;
+    private SharedPreferences prefs;
 
     public ApiKeyManager(Context context) {
-        this.prefs = context.getApplicationContext().getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+        Context appContext = context.getApplicationContext();
+        try {
+            String masterKeyAlias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC);
+            this.prefs = EncryptedSharedPreferences.create(
+                    PREF_NAME,
+                    masterKeyAlias,
+                    appContext,
+                    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            );
+        } catch (Exception e) {
+            // Phase 26 Alignment: Fallback to private SharedPreferences if Android Keystore is unavailable
+            this.prefs = appContext.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+        }
     }
 
     public void saveApiKey(String apiKey) {
@@ -38,7 +54,9 @@ public class ApiKeyManager {
     }
 
     public void saveSelectedModel(String modelId) {
-        prefs.edit().putString(KEY_SELECTED_MODEL, modelId).apply();
+        if (modelId != null) {
+            prefs.edit().putString(KEY_SELECTED_MODEL, modelId.trim()).apply();
+        }
     }
 
     public String getSelectedModel() {
