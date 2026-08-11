@@ -64,6 +64,13 @@ public class ProjectSerializer {
                     rgbaArr.put(rgba[0]); rgbaArr.put(rgba[1]); rgbaArr.put(rgba[2]); rgbaArr.put(rgba[3]);
                     matJson.put("baseColorRGBA", rgbaArr);
 
+                    // PBR Texture Maps URIs
+                    matJson.put("albedoTextureMap", mat.getAlbedoTextureMap() != null ? mat.getAlbedoTextureMap() : JSONObject.NULL);
+                    matJson.put("normalMap", mat.getNormalMap() != null ? mat.getNormalMap() : JSONObject.NULL);
+                    matJson.put("roughnessMap", mat.getRoughnessMap() != null ? mat.getRoughnessMap() : JSONObject.NULL);
+                    matJson.put("metallicMap", mat.getMetallicMap() != null ? mat.getMetallicMap() : JSONObject.NULL);
+                    matJson.put("aoMap", mat.getAoMap() != null ? mat.getAoMap() : JSONObject.NULL);
+
                     matArr.put(matJson);
                 }
             }
@@ -109,6 +116,25 @@ public class ProjectSerializer {
                     objJson.put("materialId", obj.getMaterial().getId());
                 } else {
                     objJson.put("materialId", JSONObject.NULL);
+                }
+
+                // Mesh Metadata and Boundary Bounds
+                if (obj.getMesh() != null) {
+                    JSONObject meshJson = new JSONObject();
+                    meshJson.put("vertexCount", obj.getMesh().getVertexCount());
+                    meshJson.put("triangleCount", obj.getMesh().getTriangleCount());
+                    
+                    JSONArray minArr = new JSONArray();
+                    float[] minBounds = obj.getMesh().getMinBounds();
+                    minArr.put(minBounds[0]); minArr.put(minBounds[1]); minArr.put(minBounds[2]);
+                    meshJson.put("minBounds", minArr);
+
+                    JSONArray maxArr = new JSONArray();
+                    float[] maxBounds = obj.getMesh().getMaxBounds();
+                    maxArr.put(maxBounds[0]); maxArr.put(maxBounds[1]); maxArr.put(maxBounds[2]);
+                    meshJson.put("maxBounds", maxArr);
+
+                    objJson.put("meshMetadata", meshJson);
                 }
 
                 nodesArr.put(objJson);
