@@ -9,7 +9,6 @@ import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 
 import javax.microedition.khronos.egl.EGLConfig;
@@ -32,9 +31,15 @@ public class StudioGLRenderer implements GLSurfaceView.Renderer {
     private int uRoughnessHandle;
     private int uEmissionHandle;
     private int uIsSelectedHandle;
+    private int uTimeHandle;
+    private int uIsWaterHandle;
 
     private int aPositionHandle;
     private int aNormalHandle;
+    private int aTexCoordHandle;
+
+    // Runtime clock tracking for procedural shaders
+    private float runTime = 0.0f;
 
     // Studio Grid Buffer
     private FloatBuffer gridBuffer;
@@ -47,11 +52,14 @@ public class StudioGLRenderer implements GLSurfaceView.Renderer {
             "uniform mat4 uModelMatrix;\n" +
             "attribute vec4 aPosition;\n" +
             "attribute vec3 aNormal;\n" +
+            "attribute vec2 aTexCoord;\n" +
             "varying vec3 vNormal;\n" +
             "varying vec3 vFragPos;\n" +
+            "varying vec2 vTexCoord;\n" +
             "void main() {\n" +
             "    vFragPos = vec3(uModelMatrix * aPosition);\n" +
             "    vNormal = normalize(mat3(uModelMatrix) * aNormal);\n" +
+            "    vTexCoord = aTexCoord;\n" +
             "    gl_Position = uMVPMatrix * aPosition;\n" +
             "}\n";
 
@@ -59,6 +67,7 @@ public class StudioGLRenderer implements GLSurfaceView.Renderer {
             "precision mediump float;\n" +
             "varying vec3 vNormal;\n" +
             "varying vec3 vFragPos;\n" +
+            "varying vec2 vTexCoord;\n" +
             "uniform vec4 uColor;\n" +
             "uniform vec3 uLightPos;\n" +
             "uniform vec3 uLightColor;\n" +
@@ -68,10 +77,20 @@ public class StudioGLRenderer implements GLSurfaceView.Renderer {
             "uniform float uRoughness;\n" +
             "uniform vec4 uEmission;\n" +
             "uniform float uIsSelected;\n" +
+            "uniform float uTime;\n" +
+            "uniform float uIsWater;\n" +
             "void main() {\n" +
             "    vec3 norm = normalize(vNormal);\n" +
-            "    vec3 lightDir = normalize(uLightPos - vFragPos);\n" +
             "    vec3 viewDir = normalize(uCameraPos - vFragPos);\n" +
+            "    \n" +
+            "    // Dynamic procedural water wave calculations\n" +
+            "    if (uIsWater > 0.5) {\n" +
+            "        float waveX = sin(vFragPos.x * 3.0 + uTime * 2.5) * 0.12;\n" +
+            "        float waveZ = cos(vFragPos.z * 3.0 + uTime * 2.0) * 0.12;\n" +
+            "        norm = normalize(norm + vec3(waveX, 0.0, waveZ));\n" +
+            "    }\n" +
+            "    \n" +
+            "    vec3 lightDir = normalize(uLightPos - vFragPos);\n" +
             "    vec3 halfDir = normalize(lightDir + viewDir);\n" +
             "    \n" +
             "    // Diffuse Reflection\n" +
@@ -88,12 +107,21 @@ public class StudioGLRenderer implements GLSurfaceView.Renderer {
             "    vec3 ambient = uAmbientColor * uColor.rgb;\n" +
             "    vec3 finalColor = ambient + uColor.rgb * diffuse + specular + uEmission.rgb * uEmission.a;\n" +
             "    \n" +
+            "    // Dynamic Fresnel factor for water transmission\n" +
+            "    if (uIsWater > 0.5) {\n" +
+            "        float fresnel = pow(1.0 - max(dot(norm, viewDir), 0.0), 3.0);\n" +
+            "        // Blend from transparent pool turquoise to reflective sky-blue\n" +
+            "        vec3 waterColor = mix(vec3(0.12, 0.65, 0.95), vec3(0.05, 0.35, 0.75), fresnel);\n" +
+            "        finalColor = waterColor + specular;\n" +
+            "    }\n" +
+            "    \n" +
             "    // Cyan Highlight Overlay when Selected\n" +
             "    if (uIsSelected > 0.5) {\n" +
             "        finalColor = mix(finalColor, vec3(0.0, 0.9, 1.0), 0.4);\n" +
             "    }\n" +
             "    \n" +
-            "    gl_FragColor = vec4(finalColor, uColor.a);\n" +
+            "    float alpha = uIsWater > 0.5 ? 0.65 : uColor.a; // Maintain pool translucency\n" +
+            "    gl_FragColor = vec4(finalColor, alpha);\n" +
             "}\n";
 
     public StudioGLRenderer(SceneManager sceneManager, CameraManager cameraManager, LightManager lightManager) {
@@ -150,9 +178,12 @@ public class StudioGLRenderer implements GLSurfaceView.Renderer {
         uRoughnessHandle = GLES20.glGetUniformLocation(programHandle, "uRoughness");
         uEmissionHandle = GLES20.glGetUniformLocation(programHandle, "uEmission");
         uIsSelectedHandle = GLES20.glGetUniformLocation(programHandle, "uIsSelected");
+        uTimeHandle = GLES20.glGetUniformLocation(programHandle, "uTime");
+        uIsWaterHandle = GLES20.glGetUniformLocation(programHandle, "uIsWater");
 
         aPositionHandle = GLES20.glGetAttribLocation(programHandle, "aPosition");
         aNormalHandle = GLES20.glGetAttribLocation(programHandle, "aNormal");
+        aTexCoordHandle = GLES20.glGetAttribLocation(programHandle, "aTexCoord");
     }
 
     @Override
@@ -172,6 +203,10 @@ public class StudioGLRenderer implements GLSurfaceView.Renderer {
         float[] cameraEye = camera.getEye();
 
         GLES20.glUniform3fv(uCameraPosHandle, 1, cameraEye, 0);
+
+        // Update runtime frame time tick
+        runTime += 0.016f; // Increments smoothly at ~60 FPS
+        GLES20.glUniform1f(uTimeHandle, runTime);
 
         // Bind Lighting Uniforms
         Light mainLight = lightManager.getPrimaryDirectionalLight();
@@ -276,6 +311,8 @@ public class StudioGLRenderer implements GLSurfaceView.Renderer {
 
         // Bind Material Uniforms
         Material mat = obj.getMaterial();
+        float isWater = 0.0f;
+
         if (mat != null) {
             float[] color = mat.getBaseColorRGBA();
             GLES20.glUniform4f(uColorHandle, color[0], color[1], color[2], color[3]);
@@ -284,6 +321,11 @@ public class StudioGLRenderer implements GLSurfaceView.Renderer {
             
             float[] emissiveRGB = mat.getEmissionRGB();
             GLES20.glUniform4f(uEmissionHandle, emissiveRGB[0], emissiveRGB[1], emissiveRGB[2], mat.getEmissionIntensity());
+
+            // Instruct shader if current mesh has the dedicated pool water material
+            if ("mat_pool_water".equalsIgnoreCase(mat.getId())) {
+                isWater = 1.0f;
+            }
         } else {
             GLES20.glUniform4f(uColorHandle, 0.8f, 0.8f, 0.8f, 1.0f);
             GLES20.glUniform1f(uMetallicHandle, 0.1f);
@@ -291,6 +333,7 @@ public class StudioGLRenderer implements GLSurfaceView.Renderer {
             GLES20.glUniform4f(uEmissionHandle, 0f, 0f, 0f, 0f);
         }
 
+        GLES20.glUniform1f(uIsWaterHandle, isWater);
         GLES20.glUniform1f(uIsSelectedHandle, obj.isSelected() ? 1.0f : 0.0f);
 
         // Bind Buffers & Draw Mesh
@@ -304,6 +347,12 @@ public class StudioGLRenderer implements GLSurfaceView.Renderer {
             GLES20.glVertexAttribPointer(aNormalHandle, 3, GLES20.GL_FLOAT, false, 0, mesh.getNormalBuffer());
         }
 
+        // Bind and pipe UV Texture coordinates if they are present on the mesh
+        if (mesh.getTexBuffer() != null) {
+            GLES20.glEnableVertexAttribArray(aTexCoordHandle);
+            GLES20.glVertexAttribPointer(aTexCoordHandle, 2, GLES20.GL_FLOAT, false, 0, mesh.getTexBuffer());
+        }
+
         if (mesh.getIndexBuffer() != null) {
             GLES20.glDrawElements(GLES20.GL_TRIANGLES, mesh.getIndices().length, GLES20.GL_UNSIGNED_SHORT, mesh.getIndexBuffer());
         } else if (mesh.getVertexBuffer() != null) {
@@ -312,6 +361,7 @@ public class StudioGLRenderer implements GLSurfaceView.Renderer {
 
         GLES20.glDisableVertexAttribArray(aPositionHandle);
         GLES20.glDisableVertexAttribArray(aNormalHandle);
+        GLES20.glDisableVertexAttribArray(aTexCoordHandle);
     }
 
     private int loadShader(int type, String shaderCode) {
