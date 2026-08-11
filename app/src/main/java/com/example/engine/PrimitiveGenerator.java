@@ -66,10 +66,19 @@ public class PrimitiveGenerator {
         float S = 1f / (float)(numSectors - 1);
 
         for (int r = 0; r < numRings; r++) {
+            float phi = (float) (-Math.PI / 2.0 + Math.PI * r * R);
+            float cosPhi = (float) Math.cos(phi);
+            float sinPhi = (float) Math.sin(phi);
+
             for (int s = 0; s < numSectors; s++) {
-                float y = (float) Math.sin(-Math.PI / 2 + Math.PI * r * R);
-                float x = (float) (Math.cos(2 * Math.PI * s * S) * Math.sin(Math.PI * r * R));
-                float z = (float) (Math.sin(2 * Math.PI * s * S) * Math.sin(Math.PI * r * R));
+                float theta = (float) (2.0 * Math.PI * s * S);
+                float cosTheta = (float) Math.cos(theta);
+                float sinTheta = (float) Math.sin(theta);
+
+                // Mathematically exact unit sphere projection mapping
+                float x = cosTheta * cosPhi;
+                float y = sinPhi;
+                float z = sinTheta * cosPhi;
 
                 vList.add(x * radius);
                 vList.add(y * radius);
@@ -203,14 +212,17 @@ public class PrimitiveGenerator {
         nList.add(0f); nList.add(1f); nList.add(0f);
         tList.add(0.5f); tList.add(1f);
 
-        // 2. Base Ring
+        // 2. Base Ring with Slanted Normals
+        float slantY = radius / (float) Math.sqrt(radius * radius + height * height);
+        float slantRad = height / (float) Math.sqrt(radius * radius + height * height);
+
         for (int i = 0; i <= segs; i++) {
             float angle = (float) (i * 2 * Math.PI / segs);
             float cos = (float) Math.cos(angle);
             float sin = (float) Math.sin(angle);
 
             vList.add(cos * radius); vList.add(-halfH); vList.add(sin * radius);
-            nList.add(cos); nList.add(0f); nList.add(sin);
+            nList.add(cos * slantRad); nList.add(slantY); nList.add(sin * slantRad);
             tList.add((float) i / segs); tList.add(0f);
         }
 
