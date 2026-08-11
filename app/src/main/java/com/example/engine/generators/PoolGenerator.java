@@ -17,47 +17,43 @@ public class PoolGenerator {
         Material wallMat = matMgr.getMaterial("mat_concrete");
         Material waterMat = matMgr.getMaterial("mat_pool_water");
 
-        // 1. Root Pool Container Node
-        SceneObject poolRoot = new SceneObject(rootId, rootName, "POOL", null, null);
-
-        // 2. Surrounding Tiled Deck (Flat base platform)
-        SceneObject surroundDeck = new SceneObject(rootId + "_deck", "Pool Surround Deck", "STRUCTURE",
+        // 1. Root Surrounding Tiled Deck (Acts as primary transform anchor)
+        SceneObject poolRoot = new SceneObject(rootId, rootName, "POOL",
                 PrimitiveGenerator.createCube(4.6f, 0.1f, 8.6f), deckMat);
-        surroundDeck.getTransform().setPosition(0f, 0.05f, 0f);
-        poolRoot.addChild(surroundDeck);
+        poolRoot.getTransform().setPosition(0f, 0.05f, 0f);
 
-        // 3. Basin Border Walls (Left, Right, Front, Back boundaries)
+        // 2. Basin Border Walls (Left, Right, Front, Back boundaries)
         float wallH = 0.4f;
         
         // Left Side Wall
         SceneObject lWall = new SceneObject(rootId + "_wall_l", "Basin Wall Left", "STRUCTURE",
                 PrimitiveGenerator.createCube(0.2f, wallH, 8.0f), wallMat);
-        lWall.getTransform().setPosition(-2.1f, 0.25f, 0f);
+        lWall.getTransform().setPosition(-2.1f, 0.2f, 0f);
         poolRoot.addChild(lWall);
 
         // Right Side Wall
         SceneObject rWall = new SceneObject(rootId + "_wall_r", "Basin Wall Right", "STRUCTURE",
                 PrimitiveGenerator.createCube(0.2f, wallH, 8.0f), wallMat);
-        rWall.getTransform().setPosition(2.1f, 0.25f, 0f);
+        rWall.getTransform().setPosition(2.1f, 0.2f, 0f);
         poolRoot.addChild(rWall);
 
         // Front End Wall
         SceneObject fWall = new SceneObject(rootId + "_wall_f", "Basin Wall Front", "STRUCTURE",
                 PrimitiveGenerator.createCube(4.0f, wallH, 0.2f), wallMat);
-        fWall.getTransform().setPosition(0f, 0.25f, 4.1f);
+        fWall.getTransform().setPosition(0f, 0.2f, 4.1f);
         poolRoot.addChild(fWall);
 
         // Back End Wall
         SceneObject bWall = new SceneObject(rootId + "_wall_b", "Basin Wall Back", "STRUCTURE",
                 PrimitiveGenerator.createCube(4.0f, wallH, 0.2f), wallMat);
-        bWall.getTransform().setPosition(0f, 0.25f, -4.1f);
+        bWall.getTransform().setPosition(0f, 0.2f, -4.1f);
         poolRoot.addChild(bWall);
 
-        // 4. Translucent Water Surface (Flat horizontal plane inset within the walls)
+        // 3. Translucent Water Surface (Flat horizontal plane inset within the walls)
         // Uses transparent 'mat_pool_water' (0.65 opacity) to allow viewing through to the deck base
         SceneObject waterSurface = new SceneObject(rootId + "_water", "Pool Water Surface", "STRUCTURE",
                 PrimitiveGenerator.createPlane(4.0f, 8.0f), waterMat);
-        waterSurface.getTransform().setPosition(0f, 0.35f, 0f); // Water height is slightly below border walls
+        waterSurface.getTransform().setPosition(0f, 0.3f, 0f); // Water height is slightly below border walls
         poolRoot.addChild(waterSurface);
 
         return poolRoot;
