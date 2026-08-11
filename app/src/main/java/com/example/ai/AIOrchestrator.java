@@ -129,14 +129,14 @@ public class AIOrchestrator {
                     ProductionPlan executablePlan = promptInterpreter.convertStructuredPlanToExecutablePlan(request, structuredPlan);
                     callback.onSuccess(executablePlan);
                 } catch (Exception e) {
-                    VynaraLogger.e("Plan compilation exception thrown inside parsing phase", e);
+                    VynaraLogger.e("Plan compilation exception thrown inside parsing phase", (Throwable) e);
                     callback.onError("Failed to parse Gemini production plan: " + e.getMessage());
                 }
             }
 
             @Override
             public void onError(String errorMessage) {
-                VynaraLogger.e("Gemini API connection error callback fired: " + errorMessage, null);
+                VynaraLogger.e("Gemini API connection error callback fired: " + errorMessage);
                 callback.onError("Gemini API connection error: " + errorMessage);
             }
         });
@@ -175,7 +175,7 @@ public class AIOrchestrator {
 
             @Override
             public void onError(String errorMessage) {
-                VynaraLogger.e("Studio Assistant connection error callback fired: " + errorMessage, null);
+                VynaraLogger.e("Studio Assistant connection error callback fired: " + errorMessage);
                 callback.onError(errorMessage);
             }
         });
@@ -216,7 +216,7 @@ public class AIOrchestrator {
 
             @Override
             public void onError(String errorMessage) {
-                VynaraLogger.e("AI Repair connection error callback fired: " + errorMessage, null);
+                VynaraLogger.e("AI Repair connection error callback fired: " + errorMessage);
                 callback.onError(errorMessage);
             }
         });
