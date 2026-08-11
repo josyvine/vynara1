@@ -61,11 +61,12 @@ public class GeminiApiClient {
                 if (!response.isSuccessful()) {
                     final String err = "HTTP " + response.code() + " from Gemini API";
                     mainHandler.post(() -> callback.onError(err));
+                    response.close();
                     return;
                 }
 
                 try {
-                    String bodyStr = response.body().string();
+                    String bodyStr = response.body() != null ? response.body().string() : "";
                     JSONObject json = new JSONObject(bodyStr);
                     JSONArray modelsArray = json.optJSONArray("models");
                     final List<AIModel> modelList = new ArrayList<>();
@@ -95,6 +96,8 @@ public class GeminiApiClient {
                     mainHandler.post(() -> callback.onSuccess(modelList));
                 } catch (Exception e) {
                     mainHandler.post(() -> callback.onError("Failed to parse models response: " + e.getMessage()));
+                } finally {
+                    response.close();
                 }
             }
         });
@@ -176,13 +179,24 @@ public class GeminiApiClient {
                 @Override
                 public void onResponse(Call call, Response response) throws IOException {
                     if (!response.isSuccessful()) {
-                        final String err = "HTTP Error " + response.code() + ": " + response.message();
-                        mainHandler.post(() -> callback.onError(err));
+                        String detailedError = "HTTP Error " + response.code();
+                        try {
+                            String errBody = response.body() != null ? response.body().string() : "";
+                            JSONObject errJson = new JSONObject(errBody);
+                            JSONObject errorObj = errJson.optJSONObject("error");
+                            if (errorObj != null) {
+                                detailedError = errorObj.optString("message", detailedError);
+                            }
+                        } catch (Exception ignored) {}
+                        
+                        final String finalErr = detailedError;
+                        mainHandler.post(() -> callback.onError(finalErr));
+                        response.close();
                         return;
                     }
 
                     try {
-                        String responseStr = response.body().string();
+                        String responseStr = response.body() != null ? response.body().string() : "";
                         JSONObject json = new JSONObject(responseStr);
                         JSONArray candidates = json.optJSONArray("candidates");
 
@@ -206,6 +220,8 @@ public class GeminiApiClient {
                         mainHandler.post(() -> callback.onError("No text returned in Gemini response."));
                     } catch (Exception e) {
                         mainHandler.post(() -> callback.onError("Error parsing Gemini response: " + e.getMessage()));
+                    } finally {
+                        response.close();
                     }
                 }
             });
