@@ -17,86 +17,81 @@ public class HouseGenerator {
         Material woodMat = matMgr.getMaterial("mat_wood_walnut");
         Material glassMat = matMgr.getMaterial("mat_glass");
 
-        // 1. Root House Container Node
-        SceneObject houseRoot = new SceneObject(rootId, rootName, "HOUSE", null, null);
-
-        // 2. Concrete Foundation Slab (Low, wide, grey concrete)
-        SceneObject foundation = new SceneObject(rootId + "_foundation", "House Foundation", "STRUCTURE",
+        // 1. Root Concrete Foundation Slab (Sits on the ground - acts as primary transform anchor)
+        SceneObject houseRoot = new SceneObject(rootId, rootName, "HOUSE",
                 PrimitiveGenerator.createCube(6.2f, 0.2f, 5.2f), concreteMat);
-        foundation.getTransform().setPosition(0f, 0.1f, 0f);
-        houseRoot.addChild(foundation);
+        houseRoot.getTransform().setPosition(0f, 0.1f, 0f);
 
-        // 3. Main Structure Walls (Left, Right, Back, Front Wall with door openings)
+        // 2. Main Perimeter Walls
         // Left Wall
         SceneObject lWall = new SceneObject(rootId + "_wall_l", "Wall Left", "STRUCTURE",
                 PrimitiveGenerator.createCube(0.2f, 3.0f, 5.0f), concreteMat);
-        lWall.getTransform().setPosition(-2.9f, 1.7f, 0f);
+        lWall.getTransform().setPosition(-2.9f, 1.6f, 0f);
         houseRoot.addChild(lWall);
 
         // Right Wall
         SceneObject rWall = new SceneObject(rootId + "_wall_r", "Wall Right", "STRUCTURE",
                 PrimitiveGenerator.createCube(0.2f, 3.0f, 5.0f), concreteMat);
-        rWall.getTransform().setPosition(2.9f, 1.7f, 0f);
+        rWall.getTransform().setPosition(2.9f, 1.6f, 0f);
         houseRoot.addChild(rWall);
 
         // Back Wall
         SceneObject bWall = new SceneObject(rootId + "_wall_b", "Wall Back", "STRUCTURE",
                 PrimitiveGenerator.createCube(6.0f, 3.0f, 0.2f), concreteMat);
-        bWall.getTransform().setPosition(0f, 1.7f, -2.4f);
+        bWall.getTransform().setPosition(0f, 1.6f, -2.4f);
         houseRoot.addChild(bWall);
 
-        // Front Wall (Split into Left piece, Right piece, and door header beam)
-        SceneObject fWallLeft = new SceneObject(rootId + "_wall_f_l", "Front Wall Left Piece", "STRUCTURE",
+        // Front Wall Left Panel
+        SceneObject fWallLeft = new SceneObject(rootId + "_wall_f_l", "Front Wall Left Panel", "STRUCTURE",
                 PrimitiveGenerator.createCube(2.2f, 3.0f, 0.2f), concreteMat);
-        fWallLeft.getTransform().setPosition(-1.9f, 1.7f, 2.4f);
+        fWallLeft.getTransform().setPosition(-1.9f, 1.6f, 2.4f);
         houseRoot.addChild(fWallLeft);
 
-        SceneObject fWallRight = new SceneObject(rootId + "_wall_f_r", "Front Wall Right Piece", "STRUCTURE",
+        // Front Wall Right Panel
+        SceneObject fWallRight = new SceneObject(rootId + "_wall_f_r", "Front Wall Right Panel", "STRUCTURE",
                 PrimitiveGenerator.createCube(2.2f, 3.0f, 0.2f), concreteMat);
-        fWallRight.getTransform().setPosition(1.9f, 1.7f, 2.4f);
+        fWallRight.getTransform().setPosition(1.9f, 1.6f, 2.4f);
         houseRoot.addChild(fWallRight);
 
+        // Front Wall Door Header Beam
         SceneObject fWallHeader = new SceneObject(rootId + "_wall_f_h", "Front Wall Door Header", "STRUCTURE",
                 PrimitiveGenerator.createCube(1.6f, 0.8f, 0.2f), concreteMat);
-        fWallHeader.getTransform().setPosition(0f, 2.8f, 2.4f);
+        fWallHeader.getTransform().setPosition(0f, 2.7f, 2.4f);
         houseRoot.addChild(fWallHeader);
 
-        // 4. Wooden Entrance Door Frame
+        // 3. Entrance Door Frame
         SceneObject doorFrame = new SceneObject(rootId + "_door_frame", "Entrance Door Frame", "STRUCTURE",
                 PrimitiveGenerator.createCube(1.0f, 2.2f, 0.25f), woodMat);
-        doorFrame.getTransform().setPosition(0f, 1.2f, 2.4f);
+        doorFrame.getTransform().setPosition(0f, 1.1f, 2.4f);
         houseRoot.addChild(doorFrame);
 
-        // 5. Window Frames & Translucent Glass Panes
-        // Left Side Window Frame
+        // 4. Left Window Assembly
         SceneObject lWindowFrame = new SceneObject(rootId + "_win_frame_l", "Window Frame Left", "STRUCTURE",
                 PrimitiveGenerator.createCube(0.25f, 1.2f, 1.5f), woodMat);
-        lWindowFrame.getTransform().setPosition(-2.9f, 1.8f, 0.8f);
+        lWindowFrame.getTransform().setPosition(-2.9f, 1.7f, 0.8f);
         houseRoot.addChild(lWindowFrame);
 
-        // Left Side Window Glass Pane (Uses 0.35 opacity glass)
         SceneObject lWindowGlass = new SceneObject(rootId + "_win_glass_l", "Window Glass Left", "STRUCTURE",
                 PrimitiveGenerator.createCube(0.08f, 1.1f, 1.4f), glassMat);
-        lWindowGlass.getTransform().setPosition(-2.9f, 1.8f, 0.8f);
+        lWindowGlass.getTransform().setPosition(-2.9f, 1.7f, 0.8f);
         houseRoot.addChild(lWindowGlass);
 
-        // Right Side Window Frame
+        // 5. Right Window Assembly
         SceneObject rWindowFrame = new SceneObject(rootId + "_win_frame_r", "Window Frame Right", "STRUCTURE",
                 PrimitiveGenerator.createCube(0.25f, 1.2f, 1.5f), woodMat);
-        rWindowFrame.getTransform().setPosition(2.9f, 1.8f, 0.8f);
+        rWindowFrame.getTransform().setPosition(2.9f, 1.7f, 0.8f);
         houseRoot.addChild(rWindowFrame);
 
-        // Right Side Window Glass Pane
         SceneObject rWindowGlass = new SceneObject(rootId + "_win_glass_r", "Window Glass Right", "STRUCTURE",
                 PrimitiveGenerator.createCube(0.08f, 1.1f, 1.4f), glassMat);
-        rWindowGlass.getTransform().setPosition(2.9f, 1.8f, 0.8f);
+        rWindowGlass.getTransform().setPosition(2.9f, 1.7f, 0.8f);
         houseRoot.addChild(rWindowGlass);
 
-        // 6. Sloped Roof Cap (Rotated slab on top of structure)
+        // 6. Sloped Roof Cap (Rotated wood slab - pitched for drainage)
         SceneObject roof = new SceneObject(rootId + "_roof", "Sloped Roof Cap", "STRUCTURE",
                 PrimitiveGenerator.createCube(6.4f, 0.3f, 5.6f), woodMat);
-        roof.getTransform().setPosition(0f, 3.3f, 0f);
-        roof.getTransform().setRotation(5f, 0f, 0f); // 5 degree pitch rotation for water drainage
+        roof.getTransform().setPosition(0f, 3.2f, 0f);
+        roof.getTransform().setRotation(5.0f, 0f, 0f);
         houseRoot.addChild(roof);
 
         return houseRoot;
