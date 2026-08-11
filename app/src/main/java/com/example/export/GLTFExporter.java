@@ -23,6 +23,7 @@ public class GLTFExporter {
     /**
      * Phase 18 Alignment: Generates a fully compliant GLTF 2.0 JSON file containing 
      * nodes, TRS transforms, meshes, PBR materials, accessors, bufferViews, and embedded binary buffers.
+     * Integrates rigged bone indices and skinning weights.
      */
     public static String exportSceneToGLTFJson(Scene scene) {
         if (scene == null) return "{\"error\":\"Scene is null\"}";
@@ -151,6 +152,7 @@ public class GLTFExporter {
 
                     binStream.write(posBytes);
                     currentByteOffset += posBytes.length;
+                    currentByteOffset = alignOffset(binStream, currentByteOffset);
 
                     JSONObject posAccessor = new JSONObject();
                     posAccessor.put("bufferView", posBufferViewIdx);
@@ -185,6 +187,7 @@ public class GLTFExporter {
 
                         binStream.write(normBytes);
                         currentByteOffset += normBytes.length;
+                        currentByteOffset = alignOffset(binStream, currentByteOffset);
 
                         JSONObject normAccessor = new JSONObject();
                         normAccessor.put("bufferView", normBufferViewIdx);
@@ -213,6 +216,7 @@ public class GLTFExporter {
 
                         binStream.write(idxBytes);
                         currentByteOffset += idxBytes.length;
+                        currentByteOffset = alignOffset(binStream, currentByteOffset);
 
                         JSONObject idxAccessor = new JSONObject();
                         idxAccessor.put("bufferView", idxBufferViewIdx);
@@ -223,6 +227,64 @@ public class GLTFExporter {
                         accessors.put(idxAccessor);
 
                         prim.put("indices", idxAccessorIdx);
+                    }
+
+                    // D. JOINTS_0 Buffer & Accessor (Rigged Joint Bone Mappings)
+                    if (mesh.getBoneIndices() != null && mesh.getBoneIndices().length > 0) {
+                        float[] boneInds = mesh.getBoneIndices();
+                        byte[] jointBytes = floatArrayToByteArray(boneInds);
+                        int jointBufferViewIdx = bufferViewCounter++;
+                        int jointAccessorIdx = accessorCounter++;
+
+                        JSONObject jointBufferView = new JSONObject();
+                        jointBufferView.put("buffer", 0);
+                        jointBufferView.put("byteOffset", currentByteOffset);
+                        jointBufferView.put("byteLength", jointBytes.length);
+                        jointBufferView.put("target", 34962);
+                        bufferViews.put(jointBufferView);
+
+                        binStream.write(jointBytes);
+                        currentByteOffset += jointBytes.length;
+                        currentByteOffset = alignOffset(binStream, currentByteOffset);
+
+                        JSONObject jointAccessor = new JSONObject();
+                        jointAccessor.put("bufferView", jointBufferViewIdx);
+                        jointAccessor.put("byteOffset", 0);
+                        jointAccessor.put("componentType", 5126); // FLOAT (VEC4 mapped representation)
+                        jointAccessor.put("count", boneInds.length / 4);
+                        jointAccessor.put("type", "VEC4");
+                        accessors.put(jointAccessor);
+
+                        attributes.put("JOINTS_0", jointAccessorIdx);
+                    }
+
+                    // E. WEIGHTS_0 Buffer & Accessor (Skeletal Deformation Weights)
+                    if (mesh.getBoneWeights() != null && mesh.getBoneWeights().length > 0) {
+                        float[] boneWts = mesh.getBoneWeights();
+                        byte[] weightBytes = floatArrayToByteArray(boneWts);
+                        int weightBufferViewIdx = bufferViewCounter++;
+                        int weightAccessorIdx = accessorCounter++;
+
+                        JSONObject weightBufferView = new JSONObject();
+                        weightBufferView.put("buffer", 0);
+                        weightBufferView.put("byteOffset", currentByteOffset);
+                        weightBufferView.put("byteLength", weightBytes.length);
+                        weightBufferView.put("target", 34962);
+                        bufferViews.put(weightBufferView);
+
+                        binStream.write(weightBytes);
+                        currentByteOffset += weightBytes.length;
+                        currentByteOffset = alignOffset(binStream, currentByteOffset);
+
+                        JSONObject weightAccessor = new JSONObject();
+                        weightAccessor.put("bufferView", weightBufferViewIdx);
+                        weightAccessor.put("byteOffset", 0);
+                        weightAccessor.put("componentType", 5126); // FLOAT (VEC4 mapped representation)
+                        weightAccessor.put("count", boneWts.length / 4);
+                        weightAccessor.put("type", "VEC4");
+                        accessors.put(weightAccessor);
+
+                        attributes.put("WEIGHTS_0", weightAccessorIdx);
                     }
 
                     prim.put("attributes", attributes);
@@ -270,6 +332,17 @@ public class GLTFExporter {
         } catch (Exception e) {
             return "{\"error\":\"Export failed: " + e.getMessage() + "\"}";
         }
+    }
+
+    /**
+     * Helper to write null-padding bytes to the stream, aligning the offset to a 4-byte boundary.
+     */
+    private static int alignOffset(ByteArrayOutputStream stream, int offset) {
+        int padding = (4 - (offset % 4)) % 4;
+        for (int i = 0; i < padding; i++) {
+            stream.write(0);
+        }
+        return offset + padding;
     }
 
     private static float[] eulerToQuaternion(float rx, float ry, float rz) {
