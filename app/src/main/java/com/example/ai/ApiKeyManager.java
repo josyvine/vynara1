@@ -60,7 +60,9 @@ public class ApiKeyManager {
     }
 
     public String getSelectedModel() {
-        return prefs.getString(KEY_SELECTED_MODEL, "gemini-2.5-flash");
+        // Return blank by default, forcing the app to dynamically register and bind 
+        // to a valid model returned from the Google server instead of guessing a deprecated default
+        return prefs.getString(KEY_SELECTED_MODEL, "");
     }
 
     public void clearApiKey() {
