@@ -28,7 +28,7 @@ public class HumanoidGenerator {
                 PrimitiveGenerator.createCube(0.35f * build, 0.15f, 0.25f * build), clothesMat);
         pelvis.getTransform().setPosition(0f, h * 0.52f, 0f);
 
-        // 2. Torso Chest Node (Connected to pelvis)
+        // 2. Torso Chest Node (Connected directly above the pelvis)
         SceneObject torso = new SceneObject(rootId + "_torso", "Torso", "CHARACTER",
                 PrimitiveGenerator.createCube(0.4f * build, h * 0.28f, 0.25f * build), clothesMat);
         torso.getTransform().setPosition(0f, h * 0.22f, 0f);
@@ -42,17 +42,18 @@ public class HumanoidGenerator {
 
         SceneObject head = new SceneObject(rootId + "_head", "Head", "CHARACTER",
                 PrimitiveGenerator.createSphere(0.12f * headRatio, 12, 12), skinMat);
-        head.getTransform().setPosition(0f, h * 0.12f, 0f);
+        head.getTransform().setPosition(0f, h * 0.1f, 0f);
         neck.addChild(head);
 
         // 4. Arms (Shoulder -> Upper arm -> Forearm -> Hand)
-        float armLen = h * 0.2f * limbRatio;
+        float armLen = h * 0.22f * limbRatio;
         float shoulderOffset = sw / 2f;
 
         // Left Arm Chain
         SceneObject lUpperArm = new SceneObject(rootId + "_l_up_arm", "Left Upper Arm", "CHARACTER",
                 PrimitiveGenerator.createCylinder(0.06f * build, armLen, 8), skinMat);
         lUpperArm.getTransform().setPosition(-shoulderOffset, h * 0.12f, 0f);
+        lUpperArm.getTransform().setRotation(0f, 0f, 15f); // Natural dynamic angle
         torso.addChild(lUpperArm);
 
         SceneObject lForearm = new SceneObject(rootId + "_l_fore", "Left Forearm", "CHARACTER",
@@ -62,13 +63,14 @@ public class HumanoidGenerator {
 
         SceneObject lHand = new SceneObject(rootId + "_l_hand", "Left Hand", "CHARACTER",
                 PrimitiveGenerator.createSphere(0.045f, 8, 8), skinMat);
-        lHand.getTransform().setPosition(0f, -armLen * 0.8f, 0f);
+        lHand.getTransform().setPosition(0f, -armLen * 0.9f, 0f);
         lForearm.addChild(lHand);
 
         // Right Arm Chain
         SceneObject rUpperArm = new SceneObject(rootId + "_r_up_arm", "Right Upper Arm", "CHARACTER",
                 PrimitiveGenerator.createCylinder(0.06f * build, armLen, 8), skinMat);
         rUpperArm.getTransform().setPosition(shoulderOffset, h * 0.12f, 0f);
+        rUpperArm.getTransform().setRotation(0f, 0f, -15f);
         torso.addChild(rUpperArm);
 
         SceneObject rForearm = new SceneObject(rootId + "_r_fore", "Right Forearm", "CHARACTER",
@@ -78,17 +80,17 @@ public class HumanoidGenerator {
 
         SceneObject rHand = new SceneObject(rootId + "_r_hand", "Right Hand", "CHARACTER",
                 PrimitiveGenerator.createSphere(0.045f, 8, 8), skinMat);
-        rHand.getTransform().setPosition(0f, -armLen * 0.8f, 0f);
+        rHand.getTransform().setPosition(0f, -armLen * 0.9f, 0f);
         rForearm.addChild(rHand);
 
         // 5. Legs (Hip -> Thigh -> Calf -> Foot)
-        float legLen = h * 0.26f * limbRatio;
+        float legLen = h * 0.28f * limbRatio;
         float hipOffset = 0.12f * build;
 
         // Left Leg Chain
         SceneObject lThigh = new SceneObject(rootId + "_l_thigh", "Left Thigh", "CHARACTER",
                 PrimitiveGenerator.createCylinder(0.08f * build, legLen, 8), clothesMat);
-        lThigh.getTransform().setPosition(-hipOffset, -h * 0.1f, 0f);
+        lThigh.getTransform().setPosition(-hipOffset, -0.08f, 0f);
         pelvis.addChild(lThigh);
 
         SceneObject lCalf = new SceneObject(rootId + "_l_calf", "Left Calf", "CHARACTER",
@@ -98,13 +100,13 @@ public class HumanoidGenerator {
 
         SceneObject lFoot = new SceneObject(rootId + "_l_foot", "Left Foot", "CHARACTER",
                 PrimitiveGenerator.createCube(0.08f * build, 0.05f, 0.16f), clothesMat);
-        lFoot.getTransform().setPosition(0f, -legLen * 0.95f, 0.04f);
+        lFoot.getTransform().setPosition(0f, -legLen * 0.98f, 0.04f);
         lCalf.addChild(lFoot);
 
         // Right Leg Chain
         SceneObject rThigh = new SceneObject(rootId + "_r_thigh", "Right Thigh", "CHARACTER",
                 PrimitiveGenerator.createCylinder(0.08f * build, legLen, 8), clothesMat);
-        rThigh.getTransform().setPosition(hipOffset, -h * 0.1f, 0f);
+        rThigh.getTransform().setPosition(hipOffset, -0.08f, 0f);
         pelvis.addChild(rThigh);
 
         SceneObject rCalf = new SceneObject(rootId + "_r_calf", "Right Calf", "CHARACTER",
@@ -114,7 +116,7 @@ public class HumanoidGenerator {
 
         SceneObject rFoot = new SceneObject(rootId + "_r_foot", "Right Foot", "CHARACTER",
                 PrimitiveGenerator.createCube(0.08f * build, 0.05f, 0.16f), clothesMat);
-                rFoot.getTransform().setPosition(0f, -legLen * 0.95f, 0.04f);
+        rFoot.getTransform().setPosition(0f, -legLen * 0.98f, 0.04f);
         rCalf.addChild(rFoot);
 
         return pelvis;
