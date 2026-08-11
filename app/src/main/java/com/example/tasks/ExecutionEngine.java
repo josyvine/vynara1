@@ -152,13 +152,10 @@ public class ExecutionEngine {
 
     private void notifyTaskUpdated(final TaskNode task, final TaskGraph graph, final ExecutionCallback callback) {
         mainHandler.post(() -> {
-            if (callback != null) callback.onThreadUpdated(task, graph);
+            if (callback != null) {
+                callback.onTaskUpdated(task, graph);
+            }
         });
-    }
-
-    // Helper interface support for callback mappings
-    private interface ExecutionCallbackExtended extends ExecutionCallback {
-        void onThreadUpdated(TaskNode task, TaskGraph graph);
     }
 
     private void notifyTaskUpdated(final TaskNode task, final TaskGraph graph, final Object callback) {
