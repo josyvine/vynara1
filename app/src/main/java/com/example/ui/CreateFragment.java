@@ -25,6 +25,7 @@ import androidx.fragment.app.Fragment;
 
 import com.example.MainActivity;
 import com.example.R;
+import com.example.ai.ApiKeyManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -93,6 +94,31 @@ public class CreateFragment extends Fragment {
         spinnerAutoMode = view.findViewById(R.id.spinner_auto_mode);
 
         setupSpinners();
+
+        // Dynamically resolve and update the active model sub-header from ApiKeyManager
+        if (getContext() != null) {
+            ApiKeyManager keyMgr = new ApiKeyManager(getContext());
+            String activeModel = keyMgr.getSelectedModel();
+            
+            TextView tvConnectionStatus = view.findViewById(R.id.tv_connection_status);
+            if (tvConnectionStatus == null) {
+                int fallbackId = view.getResources().getIdentifier("tv_ai_status", "id", requireContext().getPackageName());
+                if (fallbackId != 0) {
+                    tvConnectionStatus = view.findViewById(fallbackId);
+                }
+            }
+
+            if (tvConnectionStatus != null) {
+                if (keyMgr.hasApiKey()) {
+                    String displayName = (activeModel == null || activeModel.trim().isEmpty()) ? "No Model Selected" : activeModel;
+                    tvConnectionStatus.setText("AI: " + displayName + " • Connected");
+                    tvConnectionStatus.setTextColor(0xFF00E676); // Green connection color
+                } else {
+                    tvConnectionStatus.setText("AI: Disconnected");
+                    tvConnectionStatus.setTextColor(0xFFFF5252); // Red disconnection color
+                }
+            }
+        }
 
         View btnAddRef = view.findViewById(R.id.btn_add_reference);
         if (btnAddRef != null) {
