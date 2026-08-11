@@ -7,11 +7,21 @@ import com.example.ai.ApiKeyManager;
 import com.example.ai.GeminiApiClient;
 import com.example.asset.Asset;
 import com.example.asset.AssetManager;
+import com.example.character.Character;
 import com.example.character.CharacterManager;
+import com.example.character.CharacterSpecification;
 import com.example.engine.MaterialManager;
 import com.example.engine.Scene;
 import com.example.engine.SceneManager;
+import com.example.engine.SceneObject;
 import com.example.engine.ThreeDEngine;
+import com.example.engine.generators.ChairGenerator;
+import com.example.engine.generators.HouseGenerator;
+import com.example.engine.generators.PoolGenerator;
+import com.example.engine.generators.SofaGenerator;
+import com.example.engine.generators.TableGenerator;
+import com.example.engine.generators.TreeGenerator;
+import com.example.engine.generators.VillaGenerator;
 import com.example.knowledge.KnowledgeManager;
 import com.example.project.ProjectManager;
 import com.example.tasks.ExecutionEngine;
@@ -52,7 +62,6 @@ public class ProjectRuntime {
         ApiKeyManager apiKeyManager = new ApiKeyManager(this.context);
         GeminiApiClient apiClient = new GeminiApiClient();
         
-        // Fixed: Instantiated KnowledgeManager and passed it as the third parameter to AIOrchestrator
         this.orchestrator = new AIOrchestrator(apiClient, apiKeyManager, this.knowledgeManager);
         
         this.projectManager = new ProjectManager();
@@ -87,8 +96,8 @@ public class ProjectRuntime {
     public Context getContext() { return context; }
 
     /**
-     * Phase 15 Alignment: Dynamic Asset Injector. Imports generated meshes 
-     * or materials directly into the active viewport scene graph.
+     * Phase 15 Alignment: Dynamic Asset Injector. Imports generated meshes,
+     * materials, characters, or complex structures directly into the active viewport scene graph.
      */
     public boolean injectAssetIntoActiveScene(String assetId) {
         if (assetId == null || assetManager == null) return false;
@@ -97,15 +106,67 @@ public class ProjectRuntime {
 
         transactionManager.beginTransaction("Inject Asset: " + asset.getName());
         
-        // Map asset category types to procedural engine instantiation
-        if ("MESH".equalsIgnoreCase(asset.getCategory())) {
-            engine.createPrimitive(asset.getFormat().toLowerCase(), 1.5f, 1.5f, 1.5f);
-        } else if ("MATERIAL".equalsIgnoreCase(asset.getCategory())) {
-            engine.getMaterialManager().createCustomPBRMaterial(asset.getName(), "#A0A5BD", 0.1f, 0.5f);
+        String category = asset.getCategory() != null ? asset.getCategory().toUpperCase().trim() : "";
+        String name = asset.getName() != null ? asset.getName().toLowerCase().trim() : "";
+        String id = "asset_inj_" + System.currentTimeMillis();
+
+        boolean success = false;
+
+        if ("MESH".equals(category)) {
+            SceneObject obj = engine.createPrimitive(asset.getFormat().toLowerCase(), 1.5f, 1.5f, 1.5f);
+            success = obj != null;
+        } else if ("MATERIAL".equals(category)) {
+            success = engine.getMaterialManager().createCustomPBRMaterial(asset.getName(), "#A0A5BD", 0.1f, 0.5f) != null;
+        } else if ("FURNITURE".equals(category)) {
+            SceneObject furnitureObj;
+            if (name.contains("table") || name.contains("desk")) {
+                furnitureObj = TableGenerator.generateTable(id, asset.getName(), engine.getMaterialManager());
+            } else if (name.contains("chair")) {
+                furnitureObj = ChairGenerator.generateChair(id, asset.getName(), engine.getMaterialManager());
+            } else {
+                furnitureObj = SofaGenerator.generateSofa(id, asset.getName(), engine.getMaterialManager());
+            }
+            if (furnitureObj != null) {
+                engine.getSceneManager().getActiveScene().addObject(furnitureObj);
+                success = true;
+            }
+        } else if ("ARCHITECTURE".equals(category)) {
+            SceneObject archObj;
+            if (name.contains("villa")) {
+                archObj = VillaGenerator.generateVilla(id, asset.getName(), engine.getMaterialManager());
+            } else if (name.contains("pool")) {
+                archObj = PoolGenerator.generatePool(id, asset.getName(), engine.getMaterialManager());
+            } else {
+                archObj = HouseGenerator.generateHouse(id, asset.getName(), engine.getMaterialManager());
+            }
+            if (archObj != null) {
+                engine.getSceneManager().getActiveScene().addObject(archObj);
+                success = true;
+            }
+        } else if ("CHARACTER".equals(category)) {
+            CharacterSpecification spec = new CharacterSpecification("HUMANOID", asset.getName());
+            Character c = characterManager.createHumanoid(spec);
+            success = c != null;
+        } else if ("CREATURE".equals(category)) {
+            CharacterSpecification spec = new CharacterSpecification("DOG", asset.getName());
+            Character c = characterManager.createCreature(spec);
+            success = c != null;
+        } else if ("VEGETATION".equals(category) || "ENVIRONMENT".equals(category)) {
+            SceneObject vegObj = TreeGenerator.generateTree(id, asset.getName(), engine.getMaterialManager());
+            if (vegObj != null) {
+                engine.getSceneManager().getActiveScene().addObject(vegObj);
+                success = true;
+            }
         }
-        
-        transactionManager.commitTransaction();
-        return true;
+
+        if (success) {
+            transactionManager.commitTransaction();
+            engine.getSceneManager().updateWorldTransforms();
+        } else {
+            transactionManager.rollbackTransaction();
+        }
+
+        return success;
     }
 
     /**
