@@ -216,12 +216,15 @@ public class PromptInterpreter {
             if (dependencies.isEmpty()) {
                 String toolId = call.getToolId().toLowerCase();
                 
-                // Identify modification and animation tasks
+                // Identify modification, animation, validation, and export tasks
                 boolean isModifier = toolId.contains("material.set_properties") ||
                                      toolId.contains("skeleton.bind") ||
                                      toolId.contains("rig.create_ik") ||
                                      toolId.contains("animation.create_clip") ||
-                                     toolId.contains("geometry.transform.");
+                                     toolId.contains("geometry.transform.") ||
+                                     toolId.contains("validation.check_mesh") || // CRITICAL EXPORT BINDER!
+                                     toolId.contains("export.gltf") ||           // CRITICAL EXPORT BINDER!
+                                     toolId.contains("project.save");             // CRITICAL EXPORT BINDER!
 
                 if (isModifier) {
                     if (lastGeometryTaskId != null) {
