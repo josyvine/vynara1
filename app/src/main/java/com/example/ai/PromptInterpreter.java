@@ -25,125 +25,112 @@ public class PromptInterpreter {
         return createProductionPlan(userPrompt, style, targetEngine, new ArrayList<>());
     }
 
+    /**
+     * Dynamic offline fallback generator.
+     * Uses KnowledgeManager multi-concept extraction to generate tasks for ALL detected entities
+     * in the prompt (e.g., house + pool + sofa + tree) instead of relying on hardcoded single-category branching.
+     */
     public ProductionPlan createProductionPlan(String userPrompt, String style, String targetEngine, List<String> referenceImageUris) {
-        KnowledgeEntry knowledge = knowledgeManager.retrieveKnowledgeForPrompt(userPrompt);
-        String category = knowledge != null ? knowledge.getCategory() : "PHYSICAL_OBJECT";
+        List<KnowledgeEntry> matchedKnowledge = knowledgeManager.retrieveAllKnowledgeForPrompt(userPrompt);
+        KnowledgeEntry primaryKnowledge = matchedKnowledge.get(0);
 
-        String projectName = extractProjectName(userPrompt, category);
-        ProductionPlan plan = new ProductionPlan(projectName, userPrompt, category, knowledge, referenceImageUris);
+        String projectName = extractProjectName(userPrompt, primaryKnowledge.getCategory());
+        ProductionPlan plan = new ProductionPlan(projectName, userPrompt, primaryKnowledge.getCategory(), primaryKnowledge, referenceImageUris);
         TaskGraph graph = plan.getTaskGraph();
 
-        // Prepend reference image processing step if reference images are present
-        TaskNode t0 = null;
+        int taskCounter = 1;
+        String previousTaskId = null;
+
+        // Step 0: Reference Image Analysis Task if images are attached
         if (plan.hasReferenceImages()) {
-            t0 = new TaskNode("t0", "Processing Reference Images", "Analyzing " + plan.getReferenceImageUris().size() + " visual reference image(s)", null);
+            String t0Id = "task_" + taskCounter++;
+            TaskNode t0 = new TaskNode(t0Id, "Processing Reference Images", "Analyzing " + plan.getReferenceImageUris().size() + " visual reference image(s)", null);
             t0.setStatus(TaskNode.Status.COMPLETED);
             graph.addTask(t0);
+            previousTaskId = t0Id;
         }
 
-        if ("CHARACTER".equalsIgnoreCase(category)) {
-            // Humanoid DAG
-            TaskNode t1 = new TaskNode("t1", "Understanding Humanoid Request", "Analyzing anatomical requirements", null);
-            t1.setStatus(TaskNode.Status.COMPLETED);
-            if (t0 != null) t1.addDependency("t0");
+        // Generate procedural creation steps for EVERY concept detected in the prompt
+        for (KnowledgeEntry entry : matchedKnowledge) {
+            String cat = entry.getCategory();
+            String conceptId = entry.getId();
 
-            TaskNode t2 = new TaskNode("t2", "Generating Humanoid Body Mesh", "Tool: character.create_humanoid",
-                    new ToolOperation("character.create_humanoid").setParam("name", projectName).setParam("style", style));
-            t2.addDependency("t1");
+            if ("CHARACTER".equalsIgnoreCase(cat)) {
+                String tMeshId = "task_" + taskCounter++;
+                TaskNode tMesh = new TaskNode(tMeshId, "Generating " + entry.getName() + " Mesh", "Tool: character.create_humanoid",
+                        new ToolOperation("character.create_humanoid").setParam("name", entry.getName()).setParam("style", style).setParam("height", 1.8f));
+                if (previousTaskId != null) tMesh.addDependency(previousTaskId);
+                graph.addTask(tMesh);
 
-            TaskNode t3 = new TaskNode("t3", "Binding Skeleton & Skin Weights", "Tool: skeleton.bind",
-                    new ToolOperation("skeleton.bind"));
-            t3.addDependency("t2");
+                String tBindId = "task_" + taskCounter++;
+                TaskNode tBind = new TaskNode(tBindId, "Binding Skeleton & Skin Weights", "Tool: skeleton.bind",
+                        new ToolOperation("skeleton.bind"));
+                tBind.addDependency(tMeshId);
+                graph.addTask(tBind);
 
-            TaskNode t4 = new TaskNode("t4", "Configuring IK Limb Controllers", "Tool: rig.create_ik",
-                    new ToolOperation("rig.create_ik").setParam("limb", "left_arm"));
-            t4.addDependency("t3");
+                String tRigId = "task_" + taskCounter++;
+                TaskNode tRig = new TaskNode(tRigId, "Configuring IK Limb Controllers", "Tool: rig.create_ik",
+                        new ToolOperation("rig.create_ik").setParam("limb", "left_arm"));
+                tRig.addDependency(tBindId);
+                graph.addTask(tRig);
 
-            TaskNode t5 = new TaskNode("t5", "Applying Motion Pose & Animation", "Tool: animation.create_clip",
-                    new ToolOperation("animation.create_clip").setParam("clipName", userPrompt.toLowerCase().contains("run") ? "run" : "walk"));
-            t5.addDependency("t4");
+                String tAnimId = "task_" + taskCounter++;
+                String clipName = userPrompt.toLowerCase().contains("run") ? "run" : (userPrompt.toLowerCase().contains("jump") ? "jump" : "walk");
+                TaskNode tAnim = new TaskNode(tAnimId, "Applying Animation Clip (" + clipName + ")", "Tool: animation.create_clip",
+                        new ToolOperation("animation.create_clip").setParam("clipName", clipName));
+                tAnim.addDependency(tRigId);
+                graph.addTask(tAnim);
 
-            TaskNode t6 = new TaskNode("t6", "Validating 3D Mesh & Rig Integrity", "Tool: validation.check_mesh",
-                    new ToolOperation("validation.check_mesh"));
-            t6.addDependency("t5");
+                previousTaskId = tAnimId;
 
-            graph.addTask(t1); graph.addTask(t2); graph.addTask(t3); graph.addTask(t4); graph.addTask(t5); graph.addTask(t6);
+            } else if ("ANIMAL".equalsIgnoreCase(cat)) {
+                String species = conceptId.contains("bird") ? "bird" : "dog";
+                String tCreatureId = "task_" + taskCounter++;
+                TaskNode tCreature = new TaskNode(tCreatureId, "Generating " + entry.getName() + " Anatomy", "Tool: character.create_creature",
+                        new ToolOperation("character.create_creature").setParam("species", species).setParam("name", entry.getName()));
+                if (previousTaskId != null) tCreature.addDependency(previousTaskId);
+                graph.addTask(tCreature);
 
-        } else if ("ANIMAL".equalsIgnoreCase(category)) {
-            // Creature DAG
-            TaskNode t1 = new TaskNode("t1", "Understanding Creature Request", "Analyzing creature anatomical structure", null);
-            t1.setStatus(TaskNode.Status.COMPLETED);
-            if (t0 != null) t1.addDependency("t0");
+                String tAnimId = "task_" + taskCounter++;
+                TaskNode tAnim = new TaskNode(tAnimId, "Applying Locomotion Animation", "Tool: animation.create_clip",
+                        new ToolOperation("animation.create_clip").setParam("clipName", "walk"));
+                tAnim.addDependency(tCreatureId);
+                graph.addTask(tAnim);
 
-            TaskNode t2 = new TaskNode("t2", "Generating Creature Mesh & Skeleton", "Tool: character.create_creature",
-                    new ToolOperation("character.create_creature").setParam("species", userPrompt.toLowerCase().contains("bird") ? "bird" : "dog").setParam("name", projectName));
-            t2.addDependency("t1");
+                previousTaskId = tAnimId;
 
-            TaskNode t3 = new TaskNode("t3", "Applying Locomotion Animation", "Tool: animation.create_clip",
-                    new ToolOperation("animation.create_clip").setParam("clipName", "walk"));
-            t3.addDependency("t2");
+            } else {
+                // Procedural Architecture, Furniture, Environment, or Vehicle
+                String tStructId = "task_" + taskCounter++;
+                TaskNode tStruct = new TaskNode(tStructId, "Building " + entry.getName(), "Tool: geometry.create_procedural",
+                        new ToolOperation("geometry.create_procedural").setParam("type", conceptId).setParam("name", entry.getName()));
+                if (previousTaskId != null) tStruct.addDependency(previousTaskId);
+                graph.addTask(tStruct);
 
-            TaskNode t4 = new TaskNode("t4", "Validating Creature Topology", "Tool: validation.check_mesh",
-                    new ToolOperation("validation.check_mesh"));
-            t4.addDependency("t3");
-
-            graph.addTask(t1); graph.addTask(t2); graph.addTask(t3); graph.addTask(t4);
-
-        } else if ("ARCHITECTURE".equalsIgnoreCase(category)) {
-            // House / Villa DAG
-            TaskNode t1 = new TaskNode("t1", "Understanding Architectural Request", "Extracting room, pool, and deck specifications", null);
-            t1.setStatus(TaskNode.Status.COMPLETED);
-            if (t0 != null) t1.addDependency("t0");
-
-            TaskNode t2 = new TaskNode("t2", "Building Villa Structure & Walls", "Tool: geometry.create_procedural",
-                    new ToolOperation("geometry.create_procedural").setParam("type", "villa").setParam("name", projectName));
-            t2.addDependency("t1");
-
-            TaskNode t3 = new TaskNode("t3", "Constructing Swimming Pool & Deck", "Tool: geometry.create_procedural",
-                    new ToolOperation("geometry.create_procedural").setParam("type", "pool").setParam("name", "Pool & Deck"));
-            t3.addDependency("t2");
-
-            TaskNode t4 = new TaskNode("t4", "Setting Up Exterior & Interior Lighting", "Tool: scene.add_light",
-                    new ToolOperation("scene.add_light").setParam("type", "directional").setParam("intensity", 1.2f));
-            t4.addDependency("t3");
-
-            TaskNode t5 = new TaskNode("t5", "Validating Scene Architecture", "Tool: validation.check_mesh",
-                    new ToolOperation("validation.check_mesh"));
-            t5.addDependency("t4");
-
-            graph.addTask(t1); graph.addTask(t2); graph.addTask(t3); graph.addTask(t4); graph.addTask(t5);
-
-        } else {
-            // General Object / Furniture DAG
-            TaskNode t1 = new TaskNode("t1", "Analyzing Request", "Extracting 3D geometry requirements", null);
-            t1.setStatus(TaskNode.Status.COMPLETED);
-            if (t0 != null) t1.addDependency("t0");
-
-            String structType = "sofa";
-            if (userPrompt.toLowerCase().contains("table")) structType = "table";
-            else if (userPrompt.toLowerCase().contains("tree")) structType = "tree";
-
-            TaskNode t2 = new TaskNode("t2", "Creating 3D Procedural Model", "Tool: geometry.create_procedural",
-                    new ToolOperation("geometry.create_procedural").setParam("type", structType).setParam("name", projectName));
-            t2.addDependency("t1");
-
-            TaskNode t3 = new TaskNode("t3", "Configuring Material PBR Shading", "Tool: material.set_properties",
-                    new ToolOperation("material.set_properties").setParam("colorHex", "#6E3B1F").setParam("metallic", 0.2f).setParam("roughness", 0.4f));
-            t3.addDependency("t2");
-
-            TaskNode t4 = new TaskNode("t4", "Validating Mesh & Bounds", "Tool: validation.check_mesh",
-                    new ToolOperation("validation.check_mesh"));
-            t4.addDependency("t3");
-
-            graph.addTask(t1); graph.addTask(t2); graph.addTask(t3); graph.addTask(t4);
+                previousTaskId = tStructId;
+            }
         }
+
+        // Add Lighting Setup
+        String tLightId = "task_" + taskCounter++;
+        TaskNode tLight = new TaskNode(tLightId, "Configuring Scene Lighting", "Tool: scene.add_light",
+                new ToolOperation("scene.add_light").setParam("type", "directional").setParam("intensity", 1.2f).setParam("colorHex", "#FFF4E0"));
+        if (previousTaskId != null) tLight.addDependency(previousTaskId);
+        graph.addTask(tLight);
+
+        // Add Validation Check Step (Triggers AI Correction System if errors are found)
+        String tValidId = "task_" + taskCounter;
+        TaskNode tValid = new TaskNode(tValidId, "Inspecting Mesh & Scene Integrity", "Tool: validation.check_mesh",
+                new ToolOperation("validation.check_mesh"));
+        tValid.addDependency(tLightId);
+        graph.addTask(tValid);
 
         return plan;
     }
 
     /**
-     * Phase 2 Alignment: Converts structured Gemini AI JSON specifications (AIProductionPlan)
-     * into a deterministic local execution plan with mapped task dependencies.
+     * Converts Gemini's structured JSON output into an executable TaskGraph.
+     * Executes real tools and dependencies defined dynamically by AI.
      */
     public ProductionPlan convertStructuredPlanToExecutablePlan(AIProductionRequest request, AIProductionPlan structuredPlan) {
         if (structuredPlan == null || request == null) {
@@ -164,6 +151,7 @@ public class PromptInterpreter {
         for (int i = 0; i < toolCalls.size(); i++) {
             AIToolCall call = toolCalls.get(i);
             String taskId = "task_ai_" + (i + 1);
+            
             ToolOperation op = new ToolOperation(call.getToolId());
             if (call.getParameters() != null) {
                 for (Map.Entry<String, Object> entry : call.getParameters().entrySet()) {
@@ -171,8 +159,13 @@ public class PromptInterpreter {
                 }
             }
 
-            TaskNode node = new TaskNode(taskId, call.getDescription() != null ? call.getDescription() : call.getToolId(), "AI Executing: " + call.getToolId(), op);
+            String desc = call.getDescription() != null && !call.getDescription().isEmpty()
+                    ? call.getDescription()
+                    : "Executing tool: " + call.getToolId();
+
+            TaskNode node = new TaskNode(taskId, call.getToolId(), desc, op);
             
+            // Connect sequential dependencies unless specific DAG rules apply
             if (previousTaskId != null) {
                 node.addDependency(previousTaskId);
             }
@@ -180,6 +173,15 @@ public class PromptInterpreter {
             graph.addTask(node);
             previousTaskId = taskId;
         }
+
+        // Guarantee a final validation step for the AI Correction Loop
+        String finalValidationId = "task_ai_validation";
+        TaskNode validationNode = new TaskNode(finalValidationId, "validation.check_mesh",
+                "Inspecting Generated Scene Integrity", new ToolOperation("validation.check_mesh"));
+        if (previousTaskId != null) {
+            validationNode.addDependency(previousTaskId);
+        }
+        graph.addTask(validationNode);
 
         return plan;
     }
