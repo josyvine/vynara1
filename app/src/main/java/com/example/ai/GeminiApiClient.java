@@ -86,11 +86,9 @@ public class GeminiApiClient {
                     }
 
                     if (modelList.isEmpty()) {
-                        modelList.add(new AIModel("gemini-2.5-flash", "gemini-2.5-flash", "Multimodal fast model", true));
-                        modelList.add(new AIModel("gemini-2.5-pro", "gemini-2.5-pro", "Pro reasoning model", true));
-                        modelList.add(new AIModel("gemini-1.5-flash", "gemini-1.5-flash", "Fast model", true));
-                        modelList.add(new AIModel("gemini-1.5-pro", "gemini-1.5-pro", "Pro reasoning model", true));
-                        modelList.add(new AIModel("gemini-2.5-flash-image", "gemini-2.5-flash-image", "Image generation model", true));
+                        modelList.add(new AIModel("gemini-3.5-flash", "gemini-3.5-flash", "Standard fast production model", true));
+                        modelList.add(new AIModel("gemini-3.1-flash-lite", "gemini-3.1-flash-lite", "Fast lightweight model", true));
+                        modelList.add(new AIModel("gemini-3.1-pro", "gemini-3.1-pro", "Advanced reasoning model", true));
                     }
 
                     mainHandler.post(() -> callback.onSuccess(modelList));
@@ -134,7 +132,14 @@ public class GeminiApiClient {
             return;
         }
 
-        String targetModel = (modelId != null && !modelId.trim().isEmpty()) ? modelId.trim() : "gemini-2.5-flash";
+        // CRITICAL UPDATE: Instead of silently defaulting to the deprecated "gemini-2.5-flash" model 
+        // when modelId is empty, we must reject the request and inform the user to select an active model.
+        if (modelId == null || modelId.trim().isEmpty()) {
+            callback.onError("No active Gemini model selected. Please select a live model from the Settings workspace.");
+            return;
+        }
+
+        String targetModel = modelId.trim();
         String url = BASE_URL + "models/" + targetModel + ":generateContent?key=" + apiKey.trim();
 
         try {
