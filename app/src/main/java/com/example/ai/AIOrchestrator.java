@@ -5,6 +5,10 @@ import com.example.ai.protocol.AIProductionRequest;
 import com.example.knowledge.KnowledgeEntry;
 import com.example.knowledge.KnowledgeManager;
 import com.example.tasks.ProductionPlan;
+import com.example.tools.ToolDefinition;
+import com.example.tools.ToolParameter;
+import com.example.tools.ToolRegistry;
+import com.example.utils.VynaraLogger;
 
 import org.json.JSONObject;
 
@@ -34,13 +38,14 @@ public class AIOrchestrator {
 
     /**
      * CORE UPGRADE: Gemini is now the true production planner.
-     * Integrates Knowledge Engine blueprints and strictly enforces JSON schema
-     * for scene, objects, materials, animation, tools, and validation rules.
+     * Integrates Knowledge Engine blueprints, strictly exposes valid ToolRegistry manifests,
+     * and enforces structured JSON outputs for executable graph generation.
      */
     public void planProductionWithGemini(final AIProductionRequest request, final GeminiApiClient.ApiCallback<ProductionPlan> callback) {
         if (request == null || callback == null) return;
 
         if (!apiKeyManager.hasApiKey()) {
+            VynaraLogger.system("API Key missing. Executing local offline prompt interpreter fallback.");
             // Offline / missing API key fallback: Execute local prompt interpreter plan
             ProductionPlan localPlan = promptInterpreter.createProductionPlan(
                     request.getUserPrompt(), request.getStyle(), request.getTargetEngine(), request.getReferenceImageUris());
@@ -48,22 +53,47 @@ public class AIOrchestrator {
             return;
         }
 
+        // Dynamically compile the authoritative registered Tool Registry manifest
+        ToolRegistry registry = new ToolRegistry();
+        StringBuilder toolManifestBuilder = new StringBuilder();
+        toolManifestBuilder.append("AUTHORITATIVE REGISTERED COMMANDS (You must ONLY select toolIds from this list):\n");
+        for (ToolDefinition tool : registry.getRegisteredTools().values()) {
+            if (tool.isAvailable()) {
+                toolManifestBuilder.append("- Tool ID: \"").append(tool.getId()).append("\"\n");
+                toolManifestBuilder.append("  Description: ").append(tool.getDescription()).append("\n");
+                if (tool.getParameters() != null && !tool.getParameters().isEmpty()) {
+                    toolManifestBuilder.append("  Accepted Parameters: ");
+                    for (ToolParameter param : tool.getParameters()) {
+                        toolManifestBuilder.append(param.getName()).append(" (").append(param.getType()).append("), ");
+                    }
+                    toolManifestBuilder.setLength(toolManifestBuilder.length() - 2); // Trim trailing comma
+                    toolManifestBuilder.append("\n");
+                }
+            }
+        }
+
         // Inject deep construction knowledge from the Knowledge Engine
         List<KnowledgeEntry> knowledgeEntries = knowledgeManager.retrieveAllKnowledgeForPrompt(request.getUserPrompt());
         StringBuilder contextBuilder = new StringBuilder();
         if (!knowledgeEntries.isEmpty()) {
-            contextBuilder.append("KNOWLEDGE ENGINE BLUEPRINTS (Use these structures to plan the generation):\n");
+            contextBuilder.append("KNOWLEDGE ENGINE BLUEPRINTS (Use these concepts to structure the 3D generation plan):\n");
             for (KnowledgeEntry entry : knowledgeEntries) {
-                contextBuilder.append("- Domain: ").append(entry.getName()).append("\n");
+                contextBuilder.append("- Concept Domain: ").append(entry.getName()).append("\n");
                 contextBuilder.append("  Components required: ").append(entry.getComponents()).append("\n");
-                contextBuilder.append("  Capabilities needed: ").append(entry.getRequiredCapabilities()).append("\n");
+                contextBuilder.append("  Required capabilities: ").append(entry.getRequiredCapabilities()).append("\n");
                 contextBuilder.append("  Default materials: ").append(entry.getDefaultMaterials()).append("\n");
             }
         }
 
-        String systemInstruction = "You are Vynara Autonomous 3D AI Artist, acting as the creative director and technical planner. " +
-                "Do not use primitive placeholders like cubes for complex objects; utilize the provided Knowledge Engine Blueprints to build procedural assemblies. " +
-                "Return a STRICT JSON object representing the production plan.\n" +
+        String systemInstruction = "You are Vynara Autonomous 3D AI Artist, acting as the creative director and technical planner.\n" +
+                "KNOWLEDGE vs. CAPABILITY vs. TOOL vs. TASK CONTRACT:\n" +
+                "- Knowledge describes construction rules and facts. Capabilities describe what the system knows how to do.\n" +
+                "- Tools are the ONLY executable operations. Tasks are concrete operations in the production plan.\n" +
+                "- You may reason using knowledge and capabilities, but you may execute ONLY registered tools.\n" +
+                "- Do NOT use primitive placeholders like cubes for complex objects; utilize the blueprints to build procedural assemblies.\n" +
+                "- Choose your commands strictly from the provided Authoritative Registered Commands manifest. Never invent Tool IDs.\n\n" +
+                toolManifestBuilder.toString() + "\n\n" +
+                "RETURN A STRICT JSON OBJECT REPRESENTING THE PRODUCTION PLAN.\n" +
                 "REQUIRED JSON SCHEMA:\n" +
                 "{\n" +
                 "  \"intent\": \"string (e.g., CREATE_SCENE, CREATE_CHARACTER)\",\n" +
@@ -84,26 +114,29 @@ public class AIOrchestrator {
                 "\nATTACHED REFERENCE IMAGES COUNT: " + request.getReferenceImageUris().size() +
                 "\n\n" + contextBuilder.toString();
 
+        VynaraLogger.system("Asynchronously dispatching 3D creation request to Google Gemini API...");
+        VynaraLogger.gemini("Dispatched Prompt: " + request.getUserPrompt());
+        VynaraLogger.ai("Active reasoning model: " + apiKeyManager.getSelectedModel());
+
         // Enforce structured JSON API call
         apiClient.generateStructuredJson(apiKeyManager.getApiKey(), apiKeyManager.getSelectedModel(), systemInstruction, promptWithContext, new GeminiApiClient.ApiCallback<String>() {
             @Override
             public void onSuccess(String jsonResult) {
+                VynaraLogger.gemini("Raw API Response Payload Received: " + jsonResult);
                 try {
                     JSONObject root = new JSONObject(jsonResult);
                     AIProductionPlan structuredPlan = AIProductionPlan.fromJson(root);
                     ProductionPlan executablePlan = promptInterpreter.convertStructuredPlanToExecutablePlan(request, structuredPlan);
                     callback.onSuccess(executablePlan);
                 } catch (Exception e) {
-                    // CRITICAL UPDATE: Propagate the actual parsing anomaly to the callback 
-                    // instead of silently falling back to a deterministic house generation.
+                    VynaraLogger.e("Plan compilation exception thrown inside parsing phase", e);
                     callback.onError("Failed to parse Gemini production plan: " + e.getMessage());
                 }
             }
 
             @Override
             public void onError(String errorMessage) {
-                // CRITICAL UPDATE: Propagate the actual connection/network failure to the callback 
-                // instead of silently falling back to a deterministic house generation.
+                VynaraLogger.e("Gemini API connection error callback fired: " + errorMessage, null);
                 callback.onError("Gemini API connection error: " + errorMessage);
             }
         });
@@ -130,7 +163,22 @@ public class AIOrchestrator {
         
         String fullPrompt = "SCENE CONTEXT:\n" + activeSceneContextJson + "\n\nEDIT PROMPT: " + editPrompt;
 
-        apiClient.generateStructuredJson(apiKeyManager.getApiKey(), apiKeyManager.getSelectedModel(), sysInst, fullPrompt, callback);
+        VynaraLogger.system("Asynchronously dispatching Studio Assistant edit request to Google Gemini API...");
+        VynaraLogger.gemini("Dispatched Studio Edit Prompt: " + editPrompt);
+
+        apiClient.generateStructuredJson(apiKeyManager.getApiKey(), apiKeyManager.getSelectedModel(), sysInst, fullPrompt, new GeminiApiClient.ApiCallback<String>() {
+            @Override
+            public void onSuccess(String result) {
+                VynaraLogger.gemini("Raw Studio Edit Response Payload Received: " + result);
+                callback.onSuccess(result);
+            }
+
+            @Override
+            public void onError(String errorMessage) {
+                VynaraLogger.e("Studio Assistant connection error callback fired: " + errorMessage, null);
+                callback.onError(errorMessage);
+            }
+        });
     }
 
     /**
@@ -156,7 +204,22 @@ public class AIOrchestrator {
                         "ERROR MESSAGE: " + validationMessage + "\n\n" +
                         "SCENE CONTEXT:\n" + sceneContextJson;
 
-        apiClient.generateStructuredJson(apiKeyManager.getApiKey(), apiKeyManager.getSelectedModel(), sysInst, prompt, callback);
+        VynaraLogger.system("Asynchronously dispatching AI Repair Request to Google Gemini API...");
+        VynaraLogger.gemini("Dispatched AI Repair Diagnostic: " + validationMessage);
+
+        apiClient.generateStructuredJson(apiKeyManager.getApiKey(), apiKeyManager.getSelectedModel(), sysInst, prompt, new GeminiApiClient.ApiCallback<String>() {
+            @Override
+            public void onSuccess(String result) {
+                VynaraLogger.gemini("Raw AI Repair Response Payload Received: " + result);
+                callback.onSuccess(result);
+            }
+
+            @Override
+            public void onError(String errorMessage) {
+                VynaraLogger.e("AI Repair connection error callback fired: " + errorMessage, null);
+                callback.onError(errorMessage);
+            }
+        });
     }
 
     public GeminiApiClient getApiClient() { return apiClient; }
