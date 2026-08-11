@@ -59,14 +59,18 @@ public class SettingsFragment extends Fragment {
 
         if (getContext() != null) {
             ApiKeyManager keyMgr = new ApiKeyManager(getContext());
-            String savedKey = keyMgr.getApiKey();
-            if (savedKey != null && !savedKey.isEmpty()) {
-                etApiKey.setText(savedKey);
-                tvStatus.setText("● Connected");
+            
+            // Phase 26 Alignment: Display securely masked API key to avoid plain-text screen exposure
+            if (keyMgr.hasApiKey()) {
+                etApiKey.setText(keyMgr.getMaskedApiKey());
+                tvStatus.setText("● Connected (Secure)");
                 tvStatus.setTextColor(0xFF00E676);
 
                 // Fetch live models from Google API automatically on start
-                fetchLiveModels(savedKey, modelList, modelAdapter, keyMgr, false);
+                fetchLiveModels(keyMgr.getApiKey(), modelList, modelAdapter, keyMgr, false);
+            } else {
+                tvStatus.setText("● Disconnected");
+                tvStatus.setTextColor(0xFFFF5252);
             }
 
             String currentSelectedModel = keyMgr.getSelectedModel();
@@ -98,12 +102,18 @@ public class SettingsFragment extends Fragment {
         if (btnSaveKey != null) {
             btnSaveKey.setOnClickListener(v -> {
                 String key = etApiKey.getText().toString().trim();
+                if (key.contains("••••")) {
+                    Toast.makeText(getContext(), "Using securely stored API key", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+
                 if (getContext() != null) {
                     ApiKeyManager keyMgr = new ApiKeyManager(getContext());
                     keyMgr.saveApiKey(key);
-                    Toast.makeText(getContext(), "Gemini API Key saved successfully", Toast.LENGTH_SHORT).show();
-                    tvStatus.setText("● Connected");
+                    Toast.makeText(getContext(), "Gemini API Key saved securely", Toast.LENGTH_SHORT).show();
+                    tvStatus.setText("● Connected (Secure)");
                     tvStatus.setTextColor(0xFF00E676);
+                    etApiKey.setText(keyMgr.getMaskedApiKey());
                     if (!key.isEmpty()) {
                         fetchLiveModels(key, modelList, modelAdapter, keyMgr, true);
                     }
@@ -117,7 +127,7 @@ public class SettingsFragment extends Fragment {
                 if (getContext() == null) return;
                 ApiKeyManager keyMgr = new ApiKeyManager(getContext());
                 String apiKey = etApiKey.getText().toString().trim();
-                if (apiKey.isEmpty()) {
+                if (apiKey.isEmpty() || apiKey.contains("••••")) {
                     apiKey = keyMgr.getApiKey();
                 }
                 if (apiKey.isEmpty()) {
@@ -134,7 +144,7 @@ public class SettingsFragment extends Fragment {
                 if (getContext() == null) return;
                 ApiKeyManager keyMgr = new ApiKeyManager(getContext());
                 String apiKey = etApiKey.getText().toString().trim();
-                if (apiKey.isEmpty()) {
+                if (apiKey.isEmpty() || apiKey.contains("••••")) {
                     apiKey = keyMgr.getApiKey();
                 }
                 if (apiKey.isEmpty()) {
