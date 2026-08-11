@@ -45,19 +45,22 @@ public class ExecutionEngine {
 
         isPaused = false;
         isCancelled = false;
+        
+        // Reset the graph state before beginning execution
+        graph.resetGraphToQueued();
 
         threadPool.execute(() -> {
             boolean hasExecutionError = false;
 
             while (!graph.isAllCompleted() && !isCancelled && !hasExecutionError) {
                 if (isPaused) {
-                    try { Thread.sleep(100); } catch (Exception ignored) {}
+                    try { Thread.sleep(100); } catch (InterruptedException ignored) {}
                     continue;
                 }
 
                 List<TaskNode> readyTasks = graph.getReadyTasks();
                 if (readyTasks.isEmpty() && !graph.isAllCompleted()) {
-                    // Halt if graph execution is stuck due to failed dependencies
+                    // Halt if graph execution is stuck due to unresolved dependencies
                     break;
                 }
 
@@ -74,7 +77,7 @@ public class ExecutionEngine {
                         if (task.getOperation() != null && toolExecutor != null) {
                             success = toolExecutor.executeOperation(task.getOperation());
                         } else {
-                            // Virtual decision/planning task node success
+                            // Virtual planning task node success
                             success = true;
                         }
                     } catch (Exception e) {
@@ -100,7 +103,7 @@ public class ExecutionEngine {
                         break; // Stop executing remaining tasks on error
                     }
 
-                    try { Thread.sleep(150); } catch (Exception ignored) {} // Smooth UI step transition
+                    try { Thread.sleep(150); } catch (InterruptedException ignored) {} // Smooth UI step transition
                 }
             }
 
@@ -128,7 +131,10 @@ public class ExecutionEngine {
 
     public void pause() { isPaused = true; }
     public void resume() { isPaused = false; }
-    public void cancel() { isCancelled = true; }
+    
+    public void cancel() { 
+        isCancelled = true; 
+    }
     
     public boolean isPaused() { return isPaused; }
     public boolean isCancelled() { return isCancelled; }
