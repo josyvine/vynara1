@@ -76,7 +76,7 @@ public class ToolRegistry {
                 .addParam("style", "STRING", false, "realistic, superhero, cartoon, low_poly"));
 
         register(new ToolDefinition("character.create_creature", "Create Creature / Animal", "CHARACTER",
-                "Generates a 3D animal or creature (dog, bird, quadruped, fantasy).", ToolDefinition.AvailabilityState.AVAILABLE)
+                "Generates a 3D animal or creature (dog, bird, quadruped, creature).", ToolDefinition.AvailabilityState.AVAILABLE)
                 .addParam("species", "STRING", true, "dog, bird, quadruped, creature")
                 .addParam("name", "STRING", false, "Creature name"));
 
