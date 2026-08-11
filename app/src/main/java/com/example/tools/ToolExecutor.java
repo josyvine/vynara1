@@ -35,6 +35,7 @@ public class ToolExecutor {
                 float h = op.getFloatParam("height", 1.5f);
                 float d = op.getFloatParam("depth", 1.5f);
                 SceneObject obj = engine.createPrimitive(type, w, h, d);
+                engine.getSceneManager().updateWorldTransforms();
                 return obj != null;
             }
 
@@ -42,6 +43,7 @@ public class ToolExecutor {
                 String type = op.getStringParam("type", "house");
                 String name = op.getStringParam("name", type.toUpperCase());
                 SceneObject obj = engine.createProceduralStructure(type, name);
+                engine.getSceneManager().updateWorldTransforms();
                 return obj != null;
             }
 
@@ -53,6 +55,7 @@ public class ToolExecutor {
                     float y = op.getFloatParam("y", 0f);
                     float z = op.getFloatParam("z", 0f);
                     obj.getTransform().setPosition(x, y, z);
+                    engine.getSceneManager().updateWorldTransforms();
                     return true;
                 }
                 return false;
@@ -66,6 +69,7 @@ public class ToolExecutor {
                     float y = op.getFloatParam("y", 0f);
                     float z = op.getFloatParam("z", 0f);
                     obj.getTransform().setRotation(x, y, z);
+                    engine.getSceneManager().updateWorldTransforms();
                     return true;
                 }
                 return false;
@@ -79,6 +83,7 @@ public class ToolExecutor {
                     float sy = op.getFloatParam("scaleY", 1f);
                     float sz = op.getFloatParam("scaleZ", 1f);
                     obj.getTransform().setScale(sx, sy, sz);
+                    engine.getSceneManager().updateWorldTransforms();
                     return true;
                 }
                 return false;
@@ -86,11 +91,15 @@ public class ToolExecutor {
 
             case "geometry.delete_object": {
                 String objId = op.getStringParam("objectId", null);
+                boolean success;
                 if (objId != null) {
                     engine.getSceneManager().getActiveScene().removeObject(objId);
-                    return true;
+                    success = true;
+                } else {
+                    success = engine.getSceneManager().deleteSelectedObject();
                 }
-                return engine.getSceneManager().deleteSelectedObject();
+                engine.getSceneManager().updateWorldTransforms();
+                return success;
             }
 
             case "geometry.duplicate_object": {
@@ -98,6 +107,7 @@ public class ToolExecutor {
                 SceneObject target = findTargetObject(objId);
                 if (target != null) {
                     SceneObject copy = engine.getSceneManager().duplicateObject(target);
+                    engine.getSceneManager().updateWorldTransforms();
                     return copy != null;
                 }
                 return false;
@@ -141,6 +151,7 @@ public class ToolExecutor {
                         .setHeight(height)
                         .setStyle(style);
                 Character c = characterManager.createHumanoid(spec);
+                engine.getSceneManager().updateWorldTransforms();
                 return c != null;
             }
 
@@ -150,6 +161,7 @@ public class ToolExecutor {
 
                 CharacterSpecification spec = new CharacterSpecification(species, name);
                 Character c = characterManager.createCreature(spec);
+                engine.getSceneManager().updateWorldTransforms();
                 return c != null;
             }
 
@@ -163,7 +175,7 @@ public class ToolExecutor {
                     c.getSkin().normalizeWeights();
                     return true;
                 }
-                return true;
+                return c != null;
             }
 
             case "rig.create_ik": {
