@@ -12,6 +12,7 @@ import com.example.engine.MaterialManager;
 import com.example.engine.Scene;
 import com.example.engine.SceneManager;
 import com.example.engine.ThreeDEngine;
+import com.example.knowledge.KnowledgeManager;
 import com.example.project.ProjectManager;
 import com.example.tasks.ExecutionEngine;
 import com.example.tools.ToolExecutor;
@@ -25,6 +26,7 @@ public class ProjectRuntime {
     private final ThreeDEngine engine;
     private final CharacterManager characterManager;
     private final ValidationManager validationManager;
+    private final KnowledgeManager knowledgeManager;
     private final ToolRegistry toolRegistry;
     private final ToolExecutor toolExecutor;
     private final ExecutionEngine executionEngine;
@@ -42,13 +44,16 @@ public class ProjectRuntime {
         this.engine = new ThreeDEngine();
         this.characterManager = new CharacterManager(engine);
         this.validationManager = new ValidationManager();
+        this.knowledgeManager = new KnowledgeManager();
         this.toolRegistry = new ToolRegistry();
         this.toolExecutor = new ToolExecutor(engine, characterManager, validationManager);
         this.executionEngine = new ExecutionEngine(toolExecutor);
         
         ApiKeyManager apiKeyManager = new ApiKeyManager(this.context);
         GeminiApiClient apiClient = new GeminiApiClient();
-        this.orchestrator = new AIOrchestrator(apiClient, apiKeyManager, engine.getMaterialManager());
+        
+        // Fixed: Instantiated KnowledgeManager and passed it as the third parameter to AIOrchestrator
+        this.orchestrator = new AIOrchestrator(apiClient, apiKeyManager, this.knowledgeManager);
         
         this.projectManager = new ProjectManager();
         this.assetManager = new AssetManager();
@@ -69,6 +74,7 @@ public class ProjectRuntime {
     public ThreeDEngine getEngine() { return engine; }
     public CharacterManager getCharacterManager() { return characterManager; }
     public ValidationManager getValidationManager() { return validationManager; }
+    public KnowledgeManager getKnowledgeManager() { return knowledgeManager; }
     public ToolRegistry getToolRegistry() { return toolRegistry; }
     public ToolExecutor getToolExecutor() { return toolExecutor; }
     public ExecutionEngine getExecutionEngine() { return executionEngine; }
