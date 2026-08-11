@@ -21,15 +21,19 @@ public class Material {
     private String aoMap;
 
     public Material(String id, String name, String hexColor) {
-        this.id = id;
-        this.name = name;
+        this.id = id != null ? id : "mat_" + System.currentTimeMillis();
+        this.name = name != null ? name : "Unnamed Material";
         setColorHex(hexColor);
     }
 
     public Material(String id, String name, float r, float g, float b, float a) {
-        this.id = id;
-        this.name = name;
-        this.baseColorRGBA = new float[] { r, g, b, a };
+        this.id = id != null ? id : "mat_" + System.currentTimeMillis();
+        this.name = name != null ? name : "Unnamed Material";
+        this.baseColorRGBA[0] = Math.max(0.0f, Math.min(1.0f, r));
+        this.baseColorRGBA[1] = Math.max(0.0f, Math.min(1.0f, g));
+        this.baseColorRGBA[2] = Math.max(0.0f, Math.min(1.0f, b));
+        this.baseColorRGBA[3] = Math.max(0.0f, Math.min(1.0f, a));
+        this.opacity = this.baseColorRGBA[3];
     }
 
     public String getId() { return id; }
@@ -49,18 +53,28 @@ public class Material {
     public String getAoMap() { return aoMap; }
 
     public void setName(String name) { this.name = name; }
-    public void setMetallic(float metallic) { this.metallic = Math.max(0.0f, Math.min(1.0f, metallic)); }
-    public void setRoughness(float roughness) { this.roughness = Math.max(0.0f, Math.min(1.0f, roughness)); }
+    
+    public void setMetallic(float metallic) { 
+        this.metallic = Math.max(0.0f, Math.min(1.0f, metallic)); 
+    }
+    
+    public void setRoughness(float roughness) { 
+        this.roughness = Math.max(0.0f, Math.min(1.0f, roughness)); 
+    }
+    
     public void setOpacity(float opacity) { 
         this.opacity = Math.max(0.0f, Math.min(1.0f, opacity)); 
         this.baseColorRGBA[3] = this.opacity;
     }
-    public void setAmbientOcclusion(float ao) { this.ambientOcclusion = Math.max(0.0f, Math.min(1.0f, ao)); }
+    
+    public void setAmbientOcclusion(float ao) { 
+        this.ambientOcclusion = Math.max(0.0f, Math.min(1.0f, ao)); 
+    }
 
     public void setEmission(float r, float g, float b, float intensity) {
-        this.emissionRGB[0] = r;
-        this.emissionRGB[1] = g;
-        this.emissionRGB[2] = b;
+        this.emissionRGB[0] = Math.max(0.0f, Math.min(1.0f, r));
+        this.emissionRGB[1] = Math.max(0.0f, Math.min(1.0f, g));
+        this.emissionRGB[2] = Math.max(0.0f, Math.min(1.0f, b));
         this.emissionIntensity = Math.max(0.0f, intensity);
     }
 
@@ -71,14 +85,24 @@ public class Material {
     public void setAoMap(String aoUri) { this.aoMap = aoUri; }
 
     public void setColorHex(String hexColor) {
-        if (hexColor != null && !hexColor.isEmpty()) {
-            try {
-                int c = Color.parseColor(hexColor.startsWith("#") ? hexColor : "#" + hexColor);
-                baseColorRGBA[0] = Color.red(c) / 255f;
-                baseColorRGBA[1] = Color.green(c) / 255f;
-                baseColorRGBA[2] = Color.blue(c) / 255f;
-                baseColorRGBA[3] = (Color.alpha(c) / 255f) * opacity;
-            } catch (Exception ignored) {}
+        if (hexColor == null || hexColor.trim().isEmpty()) {
+            // Standard fallback light-gray PBR
+            this.baseColorRGBA = new float[] { 0.8f, 0.8f, 0.8f, this.opacity };
+            return;
+        }
+        try {
+            String sanitized = hexColor.trim();
+            if (!sanitized.startsWith("#")) {
+                sanitized = "#" + sanitized;
+            }
+            int c = Color.parseColor(sanitized);
+            baseColorRGBA[0] = Color.red(c) / 255f;
+            baseColorRGBA[1] = Color.green(c) / 255f;
+            baseColorRGBA[2] = Color.blue(c) / 255f;
+            baseColorRGBA[3] = (Color.alpha(c) / 255f) * opacity;
+        } catch (Exception e) {
+            // Standard fallback on parsing errors
+            this.baseColorRGBA = new float[] { 0.8f, 0.8f, 0.8f, this.opacity };
         }
     }
 
