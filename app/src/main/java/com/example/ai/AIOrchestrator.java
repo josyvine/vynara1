@@ -94,19 +94,17 @@ public class AIOrchestrator {
                     ProductionPlan executablePlan = promptInterpreter.convertStructuredPlanToExecutablePlan(request, structuredPlan);
                     callback.onSuccess(executablePlan);
                 } catch (Exception e) {
-                    // Fallback to local deterministic interpreter if AI JSON parsing encounters anomalies
-                    ProductionPlan fallbackPlan = promptInterpreter.createProductionPlan(
-                            request.getUserPrompt(), request.getStyle(), request.getTargetEngine(), request.getReferenceImageUris());
-                    callback.onSuccess(fallbackPlan);
+                    // CRITICAL UPDATE: Propagate the actual parsing anomaly to the callback 
+                    // instead of silently falling back to a deterministic house generation.
+                    callback.onError("Failed to parse Gemini production plan: " + e.getMessage());
                 }
             }
 
             @Override
             public void onError(String errorMessage) {
-                // Network or API error fallback: Seamlessly switch to offline local interpreter
-                ProductionPlan fallbackPlan = promptInterpreter.createProductionPlan(
-                        request.getUserPrompt(), request.getStyle(), request.getTargetEngine(), request.getReferenceImageUris());
-                callback.onSuccess(fallbackPlan);
+                // CRITICAL UPDATE: Propagate the actual connection/network failure to the callback 
+                // instead of silently falling back to a deterministic house generation.
+                callback.onError("Gemini API connection error: " + errorMessage);
             }
         });
     }
