@@ -128,8 +128,19 @@ public class CreateFragment extends Fragment {
                 if (prompt.isEmpty()) {
                     prompt = "Modern Villa & Swimming Pool";
                 }
+
+                String style = spinnerStyle.getSelectedItem() != null ? spinnerStyle.getSelectedItem().toString() : "Photorealistic";
+                String targetEngine = spinnerTarget.getSelectedItem() != null ? spinnerTarget.getSelectedItem().toString() : "OpenGL ES / GLTF";
+
+                List<String> refUrisStrList = new ArrayList<>();
+                for (Uri uri : selectedImageUris) {
+                    if (uri != null) {
+                        refUrisStrList.add(uri.toString());
+                    }
+                }
+
                 if (getActivity() instanceof MainActivity) {
-                    ((MainActivity) getActivity()).startProduction(prompt);
+                    ((MainActivity) getActivity()).startProduction(prompt, style, targetEngine, refUrisStrList);
                 }
             });
         }
