@@ -76,8 +76,21 @@ public class IKSolver {
         float alphaDeg = (float) Math.toDegrees(alphaRad);
         float betaDeg = (float) Math.toDegrees(Math.PI - betaRad);
 
+        // Apply joint limit constraints (prevent elbows and knees from bending backward)
+        if (betaDeg < 0.0f) {
+            betaDeg = 0.0f;
+        } else if (betaDeg > 155.0f) {
+            betaDeg = 155.0f; // Soft limit
+        }
+
+        // Incorporate pole vector coordinate offsets to align joint bend plane orientation
+        float poleAngleDeg = 0.0f;
+        if (Math.abs(poleX) > 0.001f || Math.abs(poleY) > 0.001f) {
+            poleAngleDeg = (float) Math.toDegrees(Math.atan2(poleY - uy, poleX - ux));
+        }
+
         // Apply calculated IK angles to bone transforms
-        upperBone.getLocalTransform().setRotation(pitchDeg - alphaDeg, yawDeg, 0f);
+        upperBone.getLocalTransform().setRotation(pitchDeg - alphaDeg, yawDeg + poleAngleDeg, 0f);
         lowerBone.getLocalTransform().setRotation(betaDeg, 0f, 0f);
 
         return true;
