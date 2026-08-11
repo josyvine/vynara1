@@ -121,6 +121,15 @@
             android:src="@android:drawable/ic_menu_rotate" />
 
         <ImageButton
+            android:id="@+id/btn_tool_scale"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginTop="4dp"
+            android:background="?selectableItemBackgroundBorderless"
+            android:contentDescription="Scale"
+            android:src="@android:drawable/ic_menu_zoom" />
+
+        <ImageButton
             android:id="@+id/btn_tool_hierarchy"
             android:layout_width="40dp"
             android:layout_height="40dp"
