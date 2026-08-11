@@ -115,7 +115,7 @@ public class PrimitiveGenerator {
         int segs = segments > 3 ? segments : 16;
         float halfH = height / 2f;
 
-        // Radial Side Walls
+        // 1. Radial Side Walls
         for (int i = 0; i <= segs; i++) {
             float angle = (float) (i * 2 * Math.PI / segs);
             float cos = (float) Math.cos(angle);
@@ -142,6 +142,46 @@ public class PrimitiveGenerator {
             iList.add(b2); iList.add(t1); iList.add(t2);
         }
 
+        // 2. Bottom Closed Cap
+        int bottomCenterIdx = vList.size() / 3;
+        vList.add(0f); vList.add(-halfH); vList.add(0f);
+        nList.add(0f); nList.add(-1f); nList.add(0f);
+        tList.add(0.5f); tList.add(0.5f);
+
+        int bottomCapStart = vList.size() / 3;
+        for (int i = 0; i <= segs; i++) {
+            float angle = (float) (i * 2 * Math.PI / segs);
+            vList.add((float) Math.cos(angle) * radius); vList.add(-halfH); vList.add((float) Math.sin(angle) * radius);
+            nList.add(0f); nList.add(-1f); nList.add(0f);
+            tList.add(0.5f + (float) Math.cos(angle) * 0.5f); tList.add(0.5f + (float) Math.sin(angle) * 0.5f);
+        }
+
+        for (short i = 0; i < segs; i++) {
+            iList.add((short) bottomCenterIdx);
+            iList.add((short) (bottomCapStart + i + 1));
+            iList.add((short) (bottomCapStart + i));
+        }
+
+        // 3. Top Closed Cap
+        int topCenterIdx = vList.size() / 3;
+        vList.add(0f); vList.add(halfH); vList.add(0f);
+        nList.add(0f); nList.add(1f); nList.add(0f);
+        tList.add(0.5f); tList.add(0.5f);
+
+        int topCapStart = vList.size() / 3;
+        for (int i = 0; i <= segs; i++) {
+            float angle = (float) (i * 2 * Math.PI / segs);
+            vList.add((float) Math.cos(angle) * radius); vList.add(halfH); vList.add((float) Math.sin(angle) * radius);
+            nList.add(0f); nList.add(1f); nList.add(0f);
+            tList.add(0.5f + (float) Math.cos(angle) * 0.5f); tList.add(0.5f + (float) Math.sin(angle) * 0.5f);
+        }
+
+        for (short i = 0; i < segs; i++) {
+            iList.add((short) topCenterIdx);
+            iList.add((short) (topCapStart + i));
+            iList.add((short) (topCapStart + i + 1));
+        }
+
         return toMesh(vList, nList, tList, iList);
     }
 
@@ -157,13 +197,13 @@ public class PrimitiveGenerator {
         int segs = segments > 3 ? segments : 16;
         float halfH = height / 2f;
 
-        // Apex Vertex
+        // 1. Apex Vertex
         short apexIdx = 0;
         vList.add(0f); vList.add(halfH); vList.add(0f);
         nList.add(0f); nList.add(1f); nList.add(0f);
         tList.add(0.5f); tList.add(1f);
 
-        // Base Ring
+        // 2. Base Ring
         for (int i = 0; i <= segs; i++) {
             float angle = (float) (i * 2 * Math.PI / segs);
             float cos = (float) Math.cos(angle);
@@ -178,6 +218,26 @@ public class PrimitiveGenerator {
             iList.add(apexIdx);
             iList.add(i);
             iList.add((short) (i + 1));
+        }
+
+        // 3. Base Closed Cap
+        int centerIdx = vList.size() / 3;
+        vList.add(0f); vList.add(-halfH); vList.add(0f);
+        nList.add(0f); nList.add(-1f); nList.add(0f);
+        tList.add(0.5f); tList.add(0.5f);
+
+        int capStart = vList.size() / 3;
+        for (int i = 0; i <= segs; i++) {
+            float angle = (float) (i * 2 * Math.PI / segs);
+            vList.add((float) Math.cos(angle) * radius); vList.add(-halfH); vList.add((float) Math.sin(angle) * radius);
+            nList.add(0f); nList.add(-1f); nList.add(0f);
+            tList.add(0.5f + (float) Math.cos(angle) * 0.5f); tList.add(0.5f + (float) Math.sin(angle) * 0.5f);
+        }
+
+        for (short i = 0; i < segs; i++) {
+            iList.add((short) centerIdx);
+            iList.add((short) (capStart + i + 1));
+            iList.add((short) (capStart + i));
         }
 
         return toMesh(vList, nList, tList, iList);
