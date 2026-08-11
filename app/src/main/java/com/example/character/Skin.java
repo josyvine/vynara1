@@ -3,6 +3,7 @@ package com.example.character;
 import com.example.engine.Mesh;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class Skin {
@@ -41,9 +42,8 @@ public class Skin {
             float vz = vertexPositions[i * 3 + 2];
 
             List<SkinWeight> vertexWeights = new ArrayList<>();
-            float totalCalculatedWeight = 0f;
 
-            // Calculate distance to each bone's local transform position
+            // Calculate distance to each bone's transform position
             for (Bone bone : allBones) {
                 if (bone == null || bone.getLocalTransform() == null) continue;
 
@@ -51,17 +51,17 @@ public class Skin {
                 float by = bone.getLocalTransform().getPy();
                 float bz = bone.getLocalTransform().getPz();
 
+                // Compute Euclidean distance squared
                 float distSq = (vx - bx) * (vx - bx) + (vy - by) * (vy - by) + (vz - bz) * (vz - bz);
                 float distance = (float) Math.sqrt(distSq);
 
-                // Inverse distance weight decay
-                float rawWeight = 1.0f / (distance + 0.1f);
+                // Inverse-distance weighting (exponential decay)
+                float rawWeight = 1.0f / (distance * distance + 0.05f);
                 vertexWeights.add(new SkinWeight(bone.getId(), rawWeight));
-                totalCalculatedWeight += rawWeight;
             }
 
             // Keep top MAX_BONE_INFLUENCES_PER_VERTEX
-            vertexWeights.sort((w1, w2) -> Float.compare(w2.getWeight(), w1.getWeight()));
+            Collections.sort(vertexWeights, (w1, w2) -> Float.compare(w2.getWeight(), w1.getWeight()));
             if (vertexWeights.size() > MAX_BONE_INFLUENCES_PER_VERTEX) {
                 vertexWeights = new ArrayList<>(vertexWeights.subList(0, MAX_BONE_INFLUENCES_PER_VERTEX));
             }
@@ -140,7 +140,7 @@ public class Skin {
                 sum += sw.getWeight();
             }
 
-            if (Math.abs(sum - 1.0f) > 0.01f) {
+            if (Math.abs(sum - 1.0f) > 0.02f) {
                 return false; // Non-normalized weights
             }
         }
