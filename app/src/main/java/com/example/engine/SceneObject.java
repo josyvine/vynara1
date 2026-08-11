@@ -17,8 +17,8 @@ public class SceneObject {
     private final List<SceneObject> children = new ArrayList<>();
 
     public SceneObject(String id, String name, String semanticType, Mesh mesh, Material material) {
-        this.id = id;
-        this.name = name;
+        this.id = id != null ? id : "obj_" + System.currentTimeMillis();
+        this.name = name != null ? name : "Scene Node";
         this.semanticType = semanticType != null ? semanticType : "PRIMITIVE";
         this.mesh = mesh;
         this.material = material;
@@ -76,7 +76,17 @@ public class SceneObject {
      * duplicates its children sub-graph.
      */
     public SceneObject cloneNode(String newId, String newName) {
-        SceneObject copy = new SceneObject(newId, newName, this.semanticType, this.mesh, this.material);
+        // Deep copy PBR material if present
+        Material clonedMat = null;
+        if (this.material != null) {
+            clonedMat = this.material.cloneMaterial(
+                    this.material.getId() + "_copy_" + System.currentTimeMillis(),
+                    this.material.getName() + " (Copy)"
+            );
+        }
+
+        // Share Mesh reference but isolate structural references
+        SceneObject copy = new SceneObject(newId, newName, this.semanticType, this.mesh, clonedMat);
         copy.setVisible(this.isVisible);
         
         if (this.transform != null) {
@@ -86,9 +96,11 @@ public class SceneObject {
         }
 
         for (SceneObject child : children) {
-            String childNewId = child.getId() + "_copy_" + System.currentTimeMillis();
-            String childNewName = child.getName() + " (Copy)";
-            copy.addChild(child.cloneNode(childNewId, childNewName));
+            if (child != null) {
+                String childNewId = child.getId() + "_copy_" + System.currentTimeMillis();
+                String childNewName = child.getName() + " (Copy)";
+                copy.addChild(child.cloneNode(childNewId, childNewName));
+            }
         }
 
         return copy;
