@@ -2,6 +2,7 @@ package com.example.ai;
 
 import android.content.Context;
 
+import com.example.ai.protocol.AIProductionRequest;
 import com.example.character.CharacterManager;
 import com.example.engine.ThreeDEngine;
 import com.example.knowledge.KnowledgeManager;
@@ -58,6 +59,35 @@ public class AIProductionController {
     public ProductionPlan generatePlan(String userPrompt, String style, String engine, List<String> referenceImageUris) {
         currentPlan = orchestrator.planProduction(userPrompt, style, engine, referenceImageUris);
         return currentPlan;
+    }
+
+    /**
+     * CORE PIPELINE UPDATE: Asynchronously requests an intelligent, structured 3D production plan
+     * directly from the selected Gemini model, utilizing active knowledge bases and reference images.
+     */
+    public void generatePlanWithGemini(String userPrompt, String style, String engine, List<String> referenceImageUris, final GeminiApiClient.ApiCallback<ProductionPlan> callback) {
+        if (callback == null) return;
+
+        AIProductionRequest request = new AIProductionRequest(userPrompt, style, engine);
+        if (referenceImageUris != null) {
+            for (String uri : referenceImageUris) {
+                request.addReferenceImageUri(uri);
+            }
+        }
+
+        // Query the live, registered Gemini model
+        orchestrator.planProductionWithGemini(request, new GeminiApiClient.ApiCallback<ProductionPlan>() {
+            @Override
+            public void onSuccess(ProductionPlan plan) {
+                currentPlan = plan;
+                callback.onSuccess(plan);
+            }
+
+            @Override
+            public void onError(String errorMessage) {
+                callback.onError(errorMessage);
+            }
+        });
     }
 
     public void executeCurrentPlan(ExecutionEngine.ExecutionCallback callback) {
