@@ -240,7 +240,15 @@ public class ToolExecutor {
             case "validation.check_mesh": {
                 if (validationManager == null || engine == null) return false;
                 List<ValidationResult> results = validationManager.validateScene(engine.getSceneManager().getActiveScene());
-                return results != null;
+                if (results == null) return false;
+                
+                // If any check fails inside validation results, fail the tool execution
+                for (ValidationResult res : results) {
+                    if (!res.isPassed()) {
+                        return false;
+                    }
+                }
+                return true;
             }
 
             case "export.gltf": {
