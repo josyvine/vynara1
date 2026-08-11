@@ -99,10 +99,17 @@ public class GLTFExporter {
                     translation.put(obj.getTransform().getPz());
                     node.put("translation", translation);
 
+                    // GLTF 2.0 requires Quaternions [X, Y, Z, W] instead of raw Euler degrees
+                    float[] quaternion = eulerToQuaternion(
+                            obj.getTransform().getRx(),
+                            obj.getTransform().getRy(),
+                            obj.getTransform().getRz()
+                    );
                     JSONArray rotation = new JSONArray();
-                    rotation.put(obj.getTransform().getRx());
-                    rotation.put(obj.getTransform().getRy());
-                    rotation.put(obj.getTransform().getRz());
+                    rotation.put(quaternion[0]);
+                    rotation.put(quaternion[1]);
+                    rotation.put(quaternion[2]);
+                    rotation.put(quaternion[3]);
                     node.put("rotation", rotation);
 
                     JSONArray scale = new JSONArray();
@@ -263,6 +270,26 @@ public class GLTFExporter {
         } catch (Exception e) {
             return "{\"error\":\"Export failed: " + e.getMessage() + "\"}";
         }
+    }
+
+    private static float[] eulerToQuaternion(float rx, float ry, float rz) {
+        float r_x = (float) Math.toRadians(rx);
+        float r_y = (float) Math.toRadians(ry);
+        float r_z = (float) Math.toRadians(rz);
+
+        float cx = (float) Math.cos(r_x / 2);
+        float sx = (float) Math.sin(r_x / 2);
+        float cy = (float) Math.cos(r_y / 2);
+        float sy = (float) Math.sin(r_y / 2);
+        float cz = (float) Math.cos(r_z / 2);
+        float sz = (float) Math.sin(r_z / 2);
+
+        float[] q = new float[4];
+        q[0] = sx * cy * cz - cx * sy * sz; // X
+        q[1] = cx * sy * cz + sx * cy * sz; // Y
+        q[2] = cx * cy * sz - sx * sy * cz; // Z
+        q[3] = cx * cy * cz + sx * sy * sz; // W
+        return q;
     }
 
     private static byte[] floatArrayToByteArray(float[] values) {
