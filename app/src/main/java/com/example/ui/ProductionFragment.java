@@ -20,6 +20,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.example.MainActivity;
 import com.example.R;
 import com.example.ai.AIProductionController;
+import com.example.ai.GeminiApiClient;
 import com.example.tasks.ExecutionEngine;
 import com.example.tasks.ProductionPlan;
 import com.example.tasks.TaskGraph;
@@ -100,11 +101,35 @@ public class ProductionFragment extends Fragment {
         // Phase 1 Alignment: Initialize Controller bound to shared ProjectRuntime
         controller = new AIProductionController(requireContext());
 
-        // Phase 2 Alignment: Generate actual executable task plan with structured constraints
-        activePlan = controller.generatePlan(prompt, style, targetEngine, referenceImageUris);
-        if (activePlan != null && activePlan.getTaskGraph() != null) {
-            adapter.setTasks(activePlan.getTaskGraph().getAllNodes());
-        }
+        // Set UI to loading state while asynchronously requesting dynamic tool-planning layout from Gemini
+        progressBar.setIndeterminate(true);
+        tvStatus.setText("AI: Devising 3D production plan with Gemini...");
+
+        controller.generatePlanWithGemini(prompt, style, targetEngine, referenceImageUris, new GeminiApiClient.ApiCallback<ProductionPlan>() {
+            @Override
+            public void onSuccess(ProductionPlan plan) {
+                handler.post(() -> {
+                    activePlan = plan;
+                    progressBar.setIndeterminate(false);
+                    if (activePlan != null && activePlan.getTaskGraph() != null) {
+                        adapter.setTasks(activePlan.getTaskGraph().getAllNodes());
+                        startRealExecutionPipeline();
+                    } else {
+                        tvStatus.setText("AI Error: Generated production plan was empty.");
+                    }
+                });
+            }
+
+            @Override
+            public void onError(String errorMessage) {
+                handler.post(() -> {
+                    progressBar.setIndeterminate(false);
+                    progressBar.setProgress(0);
+                    tvStatus.setText("AI Error: Generation Failed.");
+                    Toast.makeText(getContext(), "AI Workflow Halted: " + errorMessage, Toast.LENGTH_LONG).show();
+                });
+            }
+        });
 
         Button btnPause = view.findViewById(R.id.btn_pause_production);
         if (btnPause != null) {
@@ -140,8 +165,6 @@ public class ProductionFragment extends Fragment {
                 }
             });
         }
-
-        startRealExecutionPipeline();
     }
 
     /**
