@@ -1,21 +1,32 @@
 package com.example.ai;
 
+import com.example.ai.AIOrchestrator;
+import com.example.ai.GeminiApiClient;
+import com.example.engine.Scene;
 import com.example.tools.ToolExecutor;
 import com.example.tools.ToolOperation;
 import com.example.validation.ValidationResult;
 
+import org.json.JSONObject;
+
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class AICorrector {
     private final ToolExecutor toolExecutor;
+    private final AIOrchestrator aiOrchestrator;
+    private final Scene activeScene;
 
-    public AICorrector(ToolExecutor toolExecutor) {
+    public AICorrector(ToolExecutor toolExecutor, AIOrchestrator aiOrchestrator, Scene activeScene) {
         this.toolExecutor = toolExecutor;
+        this.aiOrchestrator = aiOrchestrator;
+        this.activeScene = activeScene;
     }
 
     /**
-     * Phase 11 Alignment: Evaluates validation failure results and executes targeted
-     * local repair tool operations. Returns true ONLY if all critical corrections succeed.
+     * CORE UPGRADE: Evaluates validation inspection results and executes the full AI correction loop:
+     * Generate -> Validate -> Inspect -> Problem Detection -> Repair Selection -> Correction -> Re-validate.
      */
     public boolean applyCorrections(List<ValidationResult> inspectionResults) {
         if (inspectionResults == null || inspectionResults.isEmpty()) {
@@ -25,11 +36,10 @@ public class AICorrector {
         boolean allCorrectionsSuccessful = true;
         
         for (ValidationResult vr : inspectionResults) {
-            // Only process actionable errors or critical flaws
             if (vr.getSeverity() == ValidationResult.Severity.ERROR || 
                 vr.getSeverity() == ValidationResult.Severity.CRITICAL) {
                 
-                boolean repairExecuted = executeTargetedRepair(vr);
+                boolean repairExecuted = executeIntelligenceDrivenRepair(vr);
                 if (!repairExecuted) {
                     allCorrectionsSuccessful = false;
                 }
@@ -39,11 +49,70 @@ public class AICorrector {
         return allCorrectionsSuccessful;
     }
 
-    private boolean executeTargetedRepair(ValidationResult vr) {
+    /**
+     * Consults Gemini AI for a repair plan, falling back to local deterministic repairs if offline.
+     */
+    private boolean executeIntelligenceDrivenRepair(ValidationResult vr) {
         if (vr == null || vr.getMessage() == null || toolExecutor == null) {
             return false;
         }
 
+        if (aiOrchestrator == null || aiOrchestrator.getApiKeyManager() == null || !aiOrchestrator.getApiKeyManager().hasApiKey()) {
+            return executeLocalDeterministicRepair(vr);
+        }
+
+        String sceneContextJson = AIContext.buildSceneContextJson(activeScene);
+        final CountDownLatch latch = new CountDownLatch(1);
+        final AtomicBoolean repairSuccess = new AtomicBoolean(false);
+
+        aiOrchestrator.requestCorrectionPlan(vr.getMessage(), vr.getCategory().name(), sceneContextJson, new GeminiApiClient.ApiCallback<String>() {
+            @Override
+            public void onSuccess(String jsonResult) {
+                try {
+                    JSONObject opObj = new JSONObject(jsonResult);
+                    String toolId = opObj.optString("toolId", null);
+                    
+                    if (toolId != null && !toolId.trim().isEmpty()) {
+                        ToolOperation repairOp = new ToolOperation(toolId);
+                        JSONObject paramsObj = opObj.optJSONObject("parameters");
+                        if (paramsObj != null) {
+                            java.util.Iterator<String> keys = paramsObj.keys();
+                            while (keys.hasNext()) {
+                                String key = keys.next();
+                                Object val = paramsObj.opt(key);
+                                if (val != null) {
+                                    repairOp.setParam(key, val);
+                                }
+                            }
+                        }
+                        boolean executed = toolExecutor.executeOperation(repairOp);
+                        repairSuccess.set(executed);
+                    } else {
+                        repairSuccess.set(executeLocalDeterministicRepair(vr));
+                    }
+                } catch (Exception e) {
+                    repairSuccess.set(executeLocalDeterministicRepair(vr));
+                }
+                latch.countDown();
+            }
+
+            @Override
+            public void onError(String errorMessage) {
+                repairSuccess.set(executeLocalDeterministicRepair(vr));
+                latch.countDown();
+            }
+        });
+
+        try {
+            latch.await(5, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            return executeLocalDeterministicRepair(vr);
+        }
+
+        return repairSuccess.get();
+    }
+
+    private boolean executeLocalDeterministicRepair(ValidationResult vr) {
         String msg = vr.getMessage().toLowerCase();
 
         // 1. Missing or Degenerate Mesh Repair
