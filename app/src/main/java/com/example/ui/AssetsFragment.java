@@ -7,6 +7,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -16,6 +17,9 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.MainActivity;
 import com.example.R;
+import com.example.asset.Asset;
+import com.example.asset.AssetManager;
+import com.example.runtime.ProjectRuntime;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -24,8 +28,10 @@ public class AssetsFragment extends Fragment {
 
     private RecyclerView rvAssets;
     private AssetAdapter adapter;
-    private List<AssetItem> allAssets = new ArrayList<>();
+    private final List<AssetItem> displayedAssets = new ArrayList<>();
+    private final List<Asset> realAssets = new ArrayList<>();
     private EditText etSearch;
+    private ProjectRuntime runtime;
 
     @Nullable
     @Override
@@ -37,18 +43,34 @@ public class AssetsFragment extends Fragment {
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
+        // Phase 1 Alignment: Retrieve shared ProjectRuntime instance
+        if (getActivity() instanceof MainActivity) {
+            runtime = ((MainActivity) getActivity()).getProjectRuntime();
+        } else {
+            runtime = ProjectRuntime.getInstance(requireContext());
+        }
+
         rvAssets = view.findViewById(R.id.rv_assets);
         etSearch = view.findViewById(R.id.et_search_assets);
 
         rvAssets.setLayoutManager(new GridLayoutManager(getContext(), 2));
-        adapter = new AssetAdapter(asset -> {
-            if (getActivity() instanceof MainActivity) {
-                ((MainActivity) getActivity()).navigateToStudio();
+        adapter = new AssetAdapter(assetItem -> {
+            if (assetItem == null) return;
+
+            // Phase 15 Alignment: Inject selected 3D asset model into active studio scene graph
+            boolean success = runtime.injectAssetIntoActiveScene(assetItem.getId());
+            if (success) {
+                Toast.makeText(getContext(), "Added " + assetItem.getName() + " to Studio Scene", Toast.LENGTH_SHORT).show();
+                if (getActivity() instanceof MainActivity) {
+                    ((MainActivity) getActivity()).navigateToStudio();
+                }
+            } else {
+                Toast.makeText(getContext(), "Failed to add asset to scene", Toast.LENGTH_SHORT).show();
             }
         });
         rvAssets.setAdapter(adapter);
 
-        loadSampleAssets();
+        loadGeneratedAssets();
 
         if (etSearch != null) {
             etSearch.addTextChangedListener(new TextWatcher() {
@@ -68,29 +90,72 @@ public class AssetsFragment extends Fragment {
         setupCategoryChips(view);
     }
 
-    private void loadSampleAssets() {
-        allAssets.clear();
-        allAssets.add(new AssetItem("a1", "Modern Villa & Pool", "Architecture", "🏠", "24.5k tris • 4K PBR"));
-        allAssets.add(new AssetItem("a2", "Rigged Superhero", "Character", "🦸", "18.2k tris • Rigged + IK"));
-        allAssets.add(new AssetItem("a3", "Animated Dog", "Creature", "🐕", "8.4k tris • 3 Anim Clips"));
-        allAssets.add(new AssetItem("a4", "Leather Sofa", "Furniture", "🛋️", "3.2k tris • Leather PBR"));
-        allAssets.add(new AssetItem("a5", "Tropical Palm Tree", "Vegetation", "🌴", "1.8k tris • Wind Shader"));
-        allAssets.add(new AssetItem("a6", "Futuristic Sci-Fi Rover", "Vehicle", "🏎️", "32.1k tris • Emissive Lights"));
-        allAssets.add(new AssetItem("a7", "Wooden Dining Table", "Furniture", "🪑", "2.1k tris • Wood Texture"));
-        allAssets.add(new AssetItem("a8", "Cyberpunk Katana", "Weapon", "⚔️", "4.5k tris • Metallic Gloss"));
+    /**
+     * Phase 15 Alignment: Loads the active 3D asset models dynamically
+     * from ProjectRuntime instead of reading hardcoded mock default rows.
+     */
+    private void loadGeneratedAssets() {
+        displayedAssets.clear();
+        realAssets.clear();
 
-        adapter.setAssets(allAssets);
+        AssetManager assetMgr = runtime.getAssetManager();
+        List<Asset> localAssets = assetMgr.getAssets();
+
+        if (localAssets != null && !localAssets.isEmpty()) {
+            realAssets.addAll(localAssets);
+            for (Asset a : localAssets) {
+                String icon = getCategoryEmoji(a.getCategory());
+                String details = a.getFileSizeStr() + " • " + a.getFormat();
+                if (a.getPolyCount() > 0) {
+                    details = a.getPolyCount() + " tris • " + details;
+                }
+                
+                AssetItem item = new AssetItem(a.getId(), a.getName(), a.getCategory(), icon, details);
+                displayedAssets.add(item);
+            }
+        } else {
+            // Populate basic default template assets if local storage is clean
+            populateFallbackDefaultTemplates(assetMgr);
+            loadGeneratedAssets();
+            return;
+        }
+
+        adapter.setAssets(displayedAssets);
+    }
+
+    private void populateFallbackDefaultTemplates(AssetManager assetMgr) {
+        assetMgr.addAsset(new Asset("a1", "Modern Villa Structure", "Architecture", "GLTF", "24.5 MB", "", 24500));
+        assetMgr.addAsset(new Asset("a2", "Rigged Biped Hero", "Character", "GLTF", "18.2 MB", "", 18200));
+        assetMgr.addAsset(new Asset("a3", "Animated Quadruped Dog", "Creature", "GLTF", "8.4 MB", "", 8400));
+        assetMgr.addAsset(new Asset("a4", "Beveled Leather Sofa", "Furniture", "GLTF", "3.2 MB", "", 3200));
+        assetMgr.addAsset(new Asset("a5", "Procedural Oak Tree", "Vegetation", "GLTF", "1.8 MB", "", 1800));
+    }
+
+    private String getCategoryEmoji(String category) {
+        if (category == null) return "📦";
+        String cat = category.toUpperCase().trim();
+        switch (cat) {
+            case "CHARACTER": return "🦸";
+            case "CREATURE": return "🐕";
+            case "ARCHITECTURE": return "🏠";
+            case "FURNITURE": return "🛋️";
+            case "VEGETATION": case "ENVIRONMENT": return "🌴";
+            case "VEHICLE": return "🏎️";
+            default: return "📦";
+        }
     }
 
     private void filterAssets(String query) {
-        if (query.isEmpty()) {
-            adapter.setAssets(allAssets);
+        if (query == null || query.isEmpty()) {
+            adapter.setAssets(displayedAssets);
             return;
         }
+
         List<AssetItem> filtered = new ArrayList<>();
-        for (AssetItem item : allAssets) {
-            if (item.getName().toLowerCase().contains(query.toLowerCase()) ||
-                item.getCategory().toLowerCase().contains(query.toLowerCase())) {
+        String q = query.toLowerCase().trim();
+        for (AssetItem item : displayedAssets) {
+            if ((item.getName() != null && item.getName().toLowerCase().contains(q)) ||
+                (item.getCategory() != null && item.getCategory().toLowerCase().contains(q))) {
                 filtered.add(item);
             }
         }
@@ -104,7 +169,7 @@ public class AssetsFragment extends Fragment {
         View chipBuild = root.findViewById(R.id.chip_cat_buildings);
         View chipMat = root.findViewById(R.id.chip_cat_materials);
 
-        if (chipAll != null) chipAll.setOnClickListener(v -> adapter.setAssets(allAssets));
+        if (chipAll != null) chipAll.setOnClickListener(v -> adapter.setAssets(displayedAssets));
         if (chipChar != null) chipChar.setOnClickListener(v -> filterAssets("Character"));
         if (chipObj != null) chipObj.setOnClickListener(v -> filterAssets("Furniture"));
         if (chipBuild != null) chipBuild.setOnClickListener(v -> filterAssets("Architecture"));
