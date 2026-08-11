@@ -19,6 +19,9 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.MainActivity;
 import com.example.R;
+import com.example.ai.AIProductionController;
+import com.example.tasks.ExecutionEngine;
+import com.example.tasks.ProductionPlan;
 import com.example.tasks.TaskGraph;
 import com.example.tasks.TaskNode;
 
@@ -28,6 +31,9 @@ import java.util.List;
 public class ProductionFragment extends Fragment {
 
     private static final String ARG_PROMPT = "arg_prompt";
+    private static final String ARG_STYLE = "arg_style";
+    private static final String ARG_ENGINE = "arg_engine";
+    private static final String ARG_REF_IMAGES = "arg_ref_images";
 
     private TextView tvProjectTitle;
     private TextView tvStatus;
@@ -38,15 +44,21 @@ public class ProductionFragment extends Fragment {
     private TaskNodeAdapter adapter;
 
     private String prompt = "3D Asset Creation";
-    private final Handler handler = new Handler(Looper.getMainLooper());
-    private boolean isPaused = false;
-    private int currentStep = 0;
-    private List<TaskNode> taskNodes = new ArrayList<>();
+    private String style = "Photorealistic";
+    private String targetEngine = "OpenGL ES / GLTF";
+    private ArrayList<String> referenceImageUris = new ArrayList<>();
 
-    public static ProductionFragment newInstance(String prompt) {
+    private AIProductionController controller;
+    private ProductionPlan activePlan;
+    private final Handler handler = new Handler(Looper.getMainLooper());
+
+    public static ProductionFragment newInstance(String prompt, String style, String targetEngine, List<String> referenceImageUris) {
         ProductionFragment fragment = new ProductionFragment();
         Bundle args = new Bundle();
         args.putString(ARG_PROMPT, prompt);
+        args.putString(ARG_STYLE, style);
+        args.putString(ARG_ENGINE, targetEngine);
+        args.putStringArrayList(ARG_REF_IMAGES, referenceImageUris != null ? new ArrayList<>(referenceImageUris) : new ArrayList<>());
         fragment.setArguments(args);
         return fragment;
     }
@@ -56,6 +68,9 @@ public class ProductionFragment extends Fragment {
         super.onCreate(savedInstanceState);
         if (getArguments() != null) {
             prompt = getArguments().getString(ARG_PROMPT, prompt);
+            style = getArguments().getString(ARG_STYLE, style);
+            targetEngine = getArguments().getString(ARG_ENGINE, targetEngine);
+            referenceImageUris = getArguments().getStringArrayList(ARG_REF_IMAGES);
         }
     }
 
@@ -82,21 +97,35 @@ public class ProductionFragment extends Fragment {
         adapter = new TaskNodeAdapter();
         rvTasks.setAdapter(adapter);
 
-        initTasks();
+        // Phase 1 Alignment: Initialize Controller bound to shared ProjectRuntime
+        controller = new AIProductionController(requireContext());
+
+        // Phase 2 Alignment: Generate actual executable task plan with structured constraints
+        activePlan = controller.generatePlan(prompt, style, targetEngine, referenceImageUris);
+        if (activePlan != null && activePlan.getTaskGraph() != null) {
+            adapter.setTasks(activePlan.getTaskGraph().getAllNodes());
+        }
 
         Button btnPause = view.findViewById(R.id.btn_pause_production);
         if (btnPause != null) {
             btnPause.setOnClickListener(v -> {
-                isPaused = !isPaused;
-                btnPause.setText(isPaused ? "Resume" : "Pause");
-                Toast.makeText(getContext(), isPaused ? "Pipeline Paused" : "Pipeline Resumed", Toast.LENGTH_SHORT).show();
+                ExecutionEngine engine = controller.getExecutionEngine();
+                if (engine.isPaused()) {
+                    engine.resume();
+                    btnPause.setText("Pause");
+                    Toast.makeText(getContext(), "Pipeline Resumed", Toast.LENGTH_SHORT).show();
+                } else {
+                    engine.pause();
+                    btnPause.setText("Resume");
+                    Toast.makeText(getContext(), "Pipeline Paused", Toast.LENGTH_SHORT).show();
+                }
             });
         }
 
         Button btnCancel = view.findViewById(R.id.btn_cancel_production);
         if (btnCancel != null) {
             btnCancel.setOnClickListener(v -> {
-                handler.removeCallbacksAndMessages(null);
+                controller.getExecutionEngine().cancel();
                 if (getActivity() instanceof MainActivity) {
                     ((MainActivity) getActivity()).navigateToCreate();
                 }
@@ -112,57 +141,57 @@ public class ProductionFragment extends Fragment {
             });
         }
 
-        startSimulation();
+        startRealExecutionPipeline();
     }
 
-    private void initTasks() {
-        taskNodes.clear();
-        taskNodes.add(new TaskNode("t1", "1. Knowledge Base Query & Intent Analysis", "AI analyzing request: " + prompt, null));
-        taskNodes.add(new TaskNode("t2", "2. Procedural Geometry Blueprint", "Generating vertices, indices, and primitive meshes", null));
-        taskNodes.add(new TaskNode("t3", "3. PBR Material & Texture Synthesis", "Synthesizing Albedo, Roughness, Metallic & Normal maps", null));
-        taskNodes.add(new TaskNode("t4", "4. Skeleton & Rigging Construction", "Building bone hierarchy and joints for rigging", null));
-        taskNodes.add(new TaskNode("t5", "5. Inverse Kinematics (IK) & Animation", "Binding skin weights and creating keyframe clips", null));
-        taskNodes.add(new TaskNode("t6", "6. Scene Composition & Lighting", "Placing lights, environment maps, and target camera", null));
-        taskNodes.add(new TaskNode("t7", "7. Real-Time Scene Mesh Validation", "Validating geometry normals, texture bounds & shader compatibility", null));
-        taskNodes.add(new TaskNode("t8", "8. Final GLTF Scene Assembly", "Exporting optimized 3D scene graph", null));
-
-        adapter.setTasks(taskNodes);
-    }
-
-    private void startSimulation() {
-        currentStep = 0;
-        runNextTaskStep();
-    }
-
-    private void runNextTaskStep() {
-        if (isPaused) {
-            handler.postDelayed(this::runNextTaskStep, 1000);
+    /**
+     * Phase 12 & 21 Alignment: Executes the true background-threaded tool execution 
+     * pipeline on the shared runtime instead of mock timer updates.
+     */
+    private void startRealExecutionPipeline() {
+        if (activePlan == null || activePlan.getTaskGraph() == null) {
+            tvStatus.setText("AI Error: Failed to compile production plan.");
             return;
         }
 
-        if (currentStep < taskNodes.size()) {
-            TaskNode node = taskNodes.get(currentStep);
-            node.setStatus(TaskNode.Status.RUNNING);
-            adapter.notifyItemChanged(currentStep);
+        controller.executeCurrentPlan(new ExecutionEngine.ExecutionCallback() {
+            @Override
+            public void onTaskUpdated(TaskNode node, TaskGraph graph) {
+                // Post updates to the Main thread safely
+                handler.post(() -> {
+                    if (node != null) {
+                        tvStatus.setText("Executing: " + node.getTitle());
+                        adapter.setTasks(graph.getAllNodes());
+                    }
+                    int completed = graph.getCompletedCount();
+                    int total = graph.getTotalCount();
+                    int percent = (int) (((float) completed / total) * 100);
+                    
+                    progressBar.setProgress(percent);
+                    tvProgressPercent.setText(percent + "%");
+                    tvTaskCounter.setText("Tasks: " + completed + " / " + total);
+                });
+            }
 
-            tvStatus.setText("AI Status: " + node.getTitle());
-            int percent = (int) (((currentStep + 1) / (float) taskNodes.size()) * 100);
-            progressBar.setProgress(percent);
-            tvProgressPercent.setText(percent + "%");
-            tvTaskCounter.setText("Tasks: " + (currentStep + 1) + " / " + taskNodes.size());
-
-            handler.postDelayed(() -> {
-                node.setStatus(TaskNode.Status.COMPLETED);
-                adapter.notifyItemChanged(currentStep);
-                currentStep++;
-                if (currentStep < taskNodes.size()) {
-                    runNextTaskStep();
-                } else {
+            @Override
+            public void onGraphCompleted(TaskGraph graph) {
+                handler.post(() -> {
                     tvStatus.setText("AI Status: All Tasks Completed Successfully! ✦");
+                    progressBar.setProgress(100);
+                    tvProgressPercent.setText("100%");
+                    tvTaskCounter.setText("Tasks: " + graph.getTotalCount() + " / " + graph.getTotalCount());
                     Toast.makeText(getContext(), "3D Generation Complete!", Toast.LENGTH_LONG).show();
-                }
-            }, 1200);
-        }
+                });
+            }
+
+            @Override
+            public void onError(String errorMessage) {
+                handler.post(() -> {
+                    tvStatus.setText("AI Error: Pipeline Halted.");
+                    Toast.makeText(getContext(), "Workflow halted: " + errorMessage, Toast.LENGTH_LONG).show();
+                });
+            }
+        });
     }
 
     @Override
