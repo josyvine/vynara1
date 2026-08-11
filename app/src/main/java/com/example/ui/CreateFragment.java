@@ -100,7 +100,13 @@ public class CreateFragment extends Fragment {
             ApiKeyManager keyMgr = new ApiKeyManager(getContext());
             String activeModel = keyMgr.getSelectedModel();
             
-            TextView tvConnectionStatus = view.findViewById(R.id.tv_connection_status);
+            // Primary ID lookup matching fragment_create.xml: R.id.tv_model_badge
+            TextView tvConnectionStatus = view.findViewById(R.id.tv_model_badge);
+            
+            // Fallback checking for backward compatibility
+            if (tvConnectionStatus == null) {
+                tvConnectionStatus = view.findViewById(R.id.tv_connection_status);
+            }
             if (tvConnectionStatus == null) {
                 int fallbackId = view.getResources().getIdentifier("tv_ai_status", "id", requireContext().getPackageName());
                 if (fallbackId != 0) {
