@@ -26,6 +26,8 @@
                 android:textSize="22sp"
                 android:textStyle="bold" />
 
+            <!-- CRITICAL UPDATE: Set default placeholder to a neutral state. 
+                 This is programmatically overwritten by CreateFragment.java using R.id.tv_model_badge -->
             <TextView
                 android:id="@+id/tv_model_badge"
                 android:layout_width="wrap_content"
@@ -35,7 +37,7 @@
                 android:background="@drawable/bg_badge"
                 android:paddingHorizontal="10dp"
                 android:paddingVertical="4dp"
-                android:text="AI: Gemini 2.5 • Connected"
+                android:text="AI: Initializing..."
                 android:textColor="@color/primary"
                 android:textSize="12sp" />
         </RelativeLayout>
