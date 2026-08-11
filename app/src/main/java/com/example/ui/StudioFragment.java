@@ -14,15 +14,26 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 
+import com.example.MainActivity;
 import com.example.R;
+import com.example.engine.Scene;
+import com.example.engine.SceneObject;
 import com.example.engine.StudioGLRenderer;
 import com.example.engine.ThreeDEngine;
+import com.example.export.GLTFExporter;
+import com.example.runtime.ProjectRuntime;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.util.List;
 
 public class StudioFragment extends Fragment {
 
     private GLSurfaceView glSurfaceView;
     private StudioGLRenderer renderer;
+    private ProjectRuntime runtime;
     private ThreeDEngine engine;
+    
     private TextView tvStats;
     private TextView tvSelectedInfo;
     private TextView tvAnimTime;
@@ -40,6 +51,15 @@ public class StudioFragment extends Fragment {
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
+        // Phase 1 Alignment: Fetch the single, unified shared project runtime instance
+        if (getActivity() instanceof MainActivity) {
+            runtime = ((MainActivity) getActivity()).getProjectRuntime();
+        } else {
+            runtime = ProjectRuntime.getInstance(requireContext());
+        }
+
+        engine = runtime.getEngine();
+
         glSurfaceView = view.findViewById(R.id.gl_surface_view);
         tvStats = view.findViewById(R.id.tv_studio_poly_stats);
         tvSelectedInfo = view.findViewById(R.id.tv_selected_object_info);
@@ -47,46 +67,101 @@ public class StudioFragment extends Fragment {
         seekbarTimeline = view.findViewById(R.id.seekbar_timeline);
         btnAnimPlay = view.findViewById(R.id.btn_anim_play);
 
-        // Setup OpenGL ES 2.0
+        // Setup OpenGL ES 2.0 Viewport Renderer
         glSurfaceView.setEGLContextClientVersion(2);
-        engine = new ThreeDEngine();
         renderer = new StudioGLRenderer(engine.getSceneManager(), engine.getCameraManager(), engine.getLightManager());
         glSurfaceView.setRenderer(renderer);
         glSurfaceView.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);
 
-        // Header buttons
+        updateStudioStatsUI();
+
+        // Phase 13 Alignment: Undo & Redo transaction history
         View btnUndo = view.findViewById(R.id.btn_undo);
         if (btnUndo != null) {
-            btnUndo.setOnClickListener(v -> Toast.makeText(getContext(), "Undo action", Toast.LENGTH_SHORT).show());
-        }
-        View btnRedo = view.findViewById(R.id.btn_redo);
-        if (btnRedo != null) {
-            btnRedo.setOnClickListener(v -> Toast.makeText(getContext(), "Redo action", Toast.LENGTH_SHORT).show());
-        }
-        View btnExport = view.findViewById(R.id.btn_export_gltf);
-        if (btnExport != null) {
-            btnExport.setOnClickListener(v -> Toast.makeText(getContext(), "3D Scene exported as .gltf / .glb", Toast.LENGTH_LONG).show());
+            btnUndo.setOnClickListener(v -> {
+                if (runtime.getUndoManager().undo()) {
+                    updateStudioStatsUI();
+                    Toast.makeText(getContext(), "Undo Successful", Toast.LENGTH_SHORT).show();
+                } else {
+                    Toast.makeText(getContext(), "Nothing to undo", Toast.LENGTH_SHORT).show();
+                }
+            });
         }
 
-        // Tool transform buttons
+        View btnRedo = view.findViewById(R.id.btn_redo);
+        if (btnRedo != null) {
+            btnRedo.setOnClickListener(v -> {
+                if (runtime.getRedoManager().redo()) {
+                    updateStudioStatsUI();
+                    Toast.makeText(getContext(), "Redo Successful", Toast.LENGTH_SHORT).show();
+                } else {
+                    Toast.makeText(getContext(), "Nothing to redo", Toast.LENGTH_SHORT).show();
+                }
+            });
+        }
+
+        // Phase 18 Alignment: Real GLTF scene exporter
+        View btnExport = view.findViewById(R.id.btn_export_gltf);
+        if (btnExport != null) {
+            btnExport.setOnClickListener(v -> exportActiveSceneToLocalGltf());
+        }
+
+        // Viewport Transform Tool Controls
         View btnSelect = view.findViewById(R.id.btn_tool_select);
         if (btnSelect != null) {
             btnSelect.setOnClickListener(v -> {
-                tvSelectedInfo.setText("Selected: Modern Villa House (Main Mesh)");
-                Toast.makeText(getContext(), "Select Tool Active", Toast.LENGTH_SHORT).show();
+                SceneObject selected = engine.getSceneManager().getSelectedObject();
+                if (selected != null) {
+                    tvSelectedInfo.setText("Selected: " + selected.getName() + " (" + selected.getSemanticType() + ")");
+                } else {
+                    List<SceneObject> objs = engine.getSceneManager().getAllObjects();
+                    if (!objs.isEmpty()) {
+                        engine.getSceneManager().selectObject(objs.get(0));
+                        tvSelectedInfo.setText("Selected: " + objs.get(0).getName());
+                    } else {
+                        tvSelectedInfo.setText("No object selected");
+                    }
+                }
             });
         }
+
         View btnMove = view.findViewById(R.id.btn_tool_move);
         if (btnMove != null) {
-            btnMove.setOnClickListener(v -> Toast.makeText(getContext(), "Translate Tool Active (XYZ Axis)", Toast.LENGTH_SHORT).show());
+            btnMove.setOnClickListener(v -> {
+                SceneObject selected = engine.getSceneManager().getSelectedObject();
+                if (selected != null) {
+                    runtime.getTransactionManager().beginTransaction("Translate Object");
+                    selected.getTransform().translate(0.5f, 0f, 0f); // Translate along positive X axis
+                    runtime.getTransactionManager().commitTransaction();
+                    Toast.makeText(getContext(), "Translated selected object (+0.5 X)", Toast.LENGTH_SHORT).show();
+                } else {
+                    Toast.makeText(getContext(), "Please select an object first", Toast.LENGTH_SHORT).show();
+                }
+            });
         }
+
         View btnRotate = view.findViewById(R.id.btn_tool_rotate);
         if (btnRotate != null) {
-            btnRotate.setOnClickListener(v -> Toast.makeText(getContext(), "Rotate Gizmo Active", Toast.LENGTH_SHORT).show());
+            btnRotate.setOnClickListener(v -> {
+                SceneObject selected = engine.getSceneManager().getSelectedObject();
+                if (selected != null) {
+                    runtime.getTransactionManager().beginTransaction("Rotate Object");
+                    selected.getTransform().rotate(0f, 15f, 0f); // Rotate along Yaw Y axis
+                    runtime.getTransactionManager().commitTransaction();
+                    Toast.makeText(getContext(), "Rotated selected object (+15 deg Yaw)", Toast.LENGTH_SHORT).show();
+                } else {
+                    Toast.makeText(getContext(), "Please select an object first", Toast.LENGTH_SHORT).show();
+                }
+            });
         }
+
         View btnHierarchy = view.findViewById(R.id.btn_tool_hierarchy);
         if (btnHierarchy != null) {
-            btnHierarchy.setOnClickListener(v -> Toast.makeText(getContext(), "Scene Graph: 12 Nodes, 3 Lights, 1 Camera", Toast.LENGTH_SHORT).show());
+            btnHierarchy.setOnClickListener(v -> {
+                int totalObjects = engine.getSceneManager().getAllObjects().size();
+                int totalLights = engine.getLightManager().getLights().size();
+                Toast.makeText(getContext(), "Scene Graph: " + totalObjects + " Nodes, " + totalLights + " Lights, 1 Camera", Toast.LENGTH_LONG).show();
+            });
         }
 
         // Timeline controls
@@ -102,7 +177,7 @@ public class StudioFragment extends Fragment {
                 @Override
                 public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                     float seconds = (progress / 100.0f) * 5.0f;
-                    tvAnimTime.setText(String.format("%.1fs / 5.0s", seconds));
+                    tvAnimTime.setText(String.format(java.util.Locale.US, "%.1fs / 5.0s", seconds));
                 }
 
                 @Override
@@ -113,7 +188,7 @@ public class StudioFragment extends Fragment {
             });
         }
 
-        // AI Assistant Button
+        // AI Assistant Dialog Launcher
         View btnAi = view.findViewById(R.id.btn_ai_studio_assistant);
         if (btnAi != null) {
             btnAi.setOnClickListener(v -> {
@@ -123,10 +198,45 @@ public class StudioFragment extends Fragment {
         }
     }
 
+    private void updateStudioStatsUI() {
+        if (tvStats != null && engine != null) {
+            Scene activeScene = engine.getSceneManager().getActiveScene();
+            int triangles = activeScene != null ? activeScene.getTotalTriangleCount() : 0;
+            int vertices = activeScene != null ? activeScene.getTotalVertexCount() : 0;
+            tvStats.setText("Tris: " + triangles + " | Verts: " + vertices);
+        }
+    }
+
+    private void exportActiveSceneToLocalGltf() {
+        if (getContext() == null || engine == null) return;
+
+        try {
+            Scene activeScene = engine.getSceneManager().getActiveScene();
+            String gltfJson = GLTFExporter.exportSceneToGLTFJson(activeScene);
+
+            File exportDir = new File(getContext().getExternalFilesDir(null), "exports");
+            if (!exportDir.exists() && !exportDir.mkdirs()) {
+                Toast.makeText(getContext(), "Failed to create export folder", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            File exportFile = new File(exportDir, "vynara_scene_" + System.currentTimeMillis() + ".gltf");
+            FileOutputStream fos = new FileOutputStream(exportFile);
+            fos.write(gltfJson.getBytes());
+            fos.close();
+
+            Toast.makeText(getContext(), "Scene exported to: " + exportFile.getName(), Toast.LENGTH_LONG).show();
+
+        } catch (Exception e) {
+            Toast.makeText(getContext(), "GLTF Export failed: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
     @Override
     public void onResume() {
         super.onResume();
         if (glSurfaceView != null) glSurfaceView.onResume();
+        updateStudioStatsUI();
     }
 
     @Override
