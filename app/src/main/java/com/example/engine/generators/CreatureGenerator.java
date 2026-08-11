@@ -79,7 +79,8 @@ public class CreatureGenerator {
 
         SceneObject frLower = new SceneObject(rootId + "_fr_low", "Front Right Lower Leg", "CREATURE",
                 PrimitiveGenerator.createCylinder(0.05f, flLegLen, 8), skinMat);
-        frLower.getTransform().setPosition(0f, -frLegLen, 0f);
+        // Fixed: Corrected -frLegLen typo to -flLegLen to match front leg measurements
+        frLower.getTransform().setPosition(0f, -flLegLen, 0f);
         frUpper.addChild(frLower);
 
         // 5. Rear Legs
