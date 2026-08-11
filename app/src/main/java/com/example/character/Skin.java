@@ -27,7 +27,7 @@ public class Skin {
 
     /**
      * Phase 8 Alignment: Binds 3D mesh vertex positions to the closest skeleton bones
-     * using proximity and distance-decay functions across up to 4 bone influences.
+     * using proximity and segment projection distance-decay functions across up to 4 bone influences.
      */
     public void bindMeshVerticesToSkeleton(float[] vertexPositions) {
         vertexSkinWeights.clear();
@@ -43,17 +43,49 @@ public class Skin {
 
             List<SkinWeight> vertexWeights = new ArrayList<>();
 
-            // Calculate distance to each bone's transform position
+            // Calculate distance from vertex to the nearest segment or origin of each bone
             for (Bone bone : allBones) {
                 if (bone == null || bone.getLocalTransform() == null) continue;
 
-                float bx = bone.getLocalTransform().getPx();
-                float by = bone.getLocalTransform().getPy();
-                float bz = bone.getLocalTransform().getPz();
+                float distance;
+                if (!bone.getChildren().isEmpty()) {
+                    // Bone has children: Treat as line segment connecting joint A (parent) to joint B (child)
+                    Bone child = bone.getChildren().get(0);
+                    float[] posA = getBoneBindPoseWorldPosition(bone);
+                    float[] posB = getBoneBindPoseWorldPosition(child);
 
-                // Compute Euclidean distance squared
-                float distSq = (vx - bx) * (vx - bx) + (vy - by) * (vy - by) + (vz - bz) * (vz - bz);
-                float distance = (float) Math.sqrt(distSq);
+                    float abx = posB[0] - posA[0];
+                    float aby = posB[1] - posA[1];
+                    float abz = posB[2] - posA[2];
+
+                    float apx = vx - posA[0];
+                    float apy = vy - posA[1];
+                    float apz = vz - posA[2];
+
+                    float abLenSq = abx * abx + aby * aby + abz * abz;
+                    float t = 0f;
+                    if (abLenSq > 0.0001f) {
+                        t = (apx * abx + apy * aby + apz * abz) / abLenSq;
+                        t = Math.max(0.0f, Math.min(1.0f, t)); // Clamp projection to segment bounds
+                    }
+
+                    // Compute closest point coordinates on the bone segment
+                    float closestX = posA[0] + t * abx;
+                    float closestY = posA[1] + t * aby;
+                    float closestZ = posA[2] + t * abz;
+
+                    float dx = vx - closestX;
+                    float dy = vy - closestY;
+                    float dz = vz - closestZ;
+                    distance = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
+                } else {
+                    // Leaf bone: Calculate simple Euclidean distance to the joint origin
+                    float[] posA = getBoneBindPoseWorldPosition(bone);
+                    float dx = vx - posA[0];
+                    float dy = vy - posA[1];
+                    float dz = vz - posA[2];
+                    distance = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
+                }
 
                 // Inverse-distance weighting (exponential decay)
                 float rawWeight = 1.0f / (distance * distance + 0.05f);
@@ -74,36 +106,50 @@ public class Skin {
 
     /**
      * Phase 8 Alignment: Purged 100% root-only weighting. Distributes initial weights
-     * across bone chains (Spine, Pelvis, Limbs) sequentially.
+     * across primary structural joint links (Spine, Pelvis) cleanly rather than arbitrary modulos.
      */
     private void initMultiBoneSkinning(int vertexCount) {
         vertexSkinWeights.clear();
         if (skeleton == null || skeleton.getAllBones().isEmpty()) return;
 
         List<Bone> bones = skeleton.getAllBones();
-        int boneCount = bones.size();
+
+        // Dynamically locate pelvis or spine structures to act as default structural anchors
+        Bone pelvis = skeleton.getBoneBySemanticName("PELVIS");
+        Bone spine = skeleton.getBoneBySemanticName("SPINE");
+        Bone root = skeleton.getRootBone();
+
+        String primaryBoneId = pelvis != null ? pelvis.getId() : (root != null ? root.getId() : bones.get(0).getId());
+        String secondaryBoneId = spine != null ? spine.getId() : primaryBoneId;
 
         for (int i = 0; i < vertexCount; i++) {
             List<SkinWeight> weights = new ArrayList<>();
-            
-            // Assign primary and secondary adjacent bone influences
-            int primaryIdx = i % boneCount;
-            int secondaryIdx = (i + 1) % boneCount;
-
-            String primaryBoneId = bones.get(primaryIdx).getId();
-            String secondaryBoneId = bones.get(secondaryIdx).getId();
-
             weights.add(new SkinWeight(primaryBoneId, 0.7f));
             if (!primaryBoneId.equals(secondaryBoneId)) {
                 weights.add(new SkinWeight(secondaryBoneId, 0.3f));
             } else {
-                weights.add(new SkinWeight(skeleton.getRootBone().getId(), 0.3f));
+                weights.add(new SkinWeight(bones.get(0).getId(), 0.3f));
             }
-
             vertexSkinWeights.add(weights);
         }
 
         normalizeWeights();
+    }
+
+    /**
+     * Resolves the absolute 3D world coordinates of a joint in default bind-pose 
+     * by accumulating local transform translations up to the root bone.
+     */
+    private float[] getBoneBindPoseWorldPosition(Bone bone) {
+        float[] pos = new float[] { 0f, 0f, 0f };
+        Bone current = bone;
+        while (current != null) {
+            pos[0] += current.getLocalTransform().getPx();
+            pos[1] += current.getLocalTransform().getPy();
+            pos[2] += current.getLocalTransform().getPz();
+            current = current.getParent();
+        }
+        return pos;
     }
 
     public void normalizeWeights() {
