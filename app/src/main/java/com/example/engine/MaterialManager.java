@@ -91,28 +91,28 @@ public class MaterialManager {
         materials.put("mat_emissive_white", matEmissive);
     }
 
-    public Material getMaterial(String id) {
+    public synchronized Material getMaterial(String id) {
         if (id == null) return materials.get("mat_default");
         Material mat = materials.get(id);
         return mat != null ? mat : materials.get("mat_default");
     }
 
-    public void addMaterial(Material mat) {
+    public synchronized void addMaterial(Material mat) {
         if (mat != null && mat.getId() != null) {
             materials.put(mat.getId(), mat);
         }
     }
 
-    public boolean removeMaterial(String id) {
+    public synchronized boolean removeMaterial(String id) {
         if (id == null || "mat_default".equals(id)) return false;
         return materials.remove(id) != null;
     }
 
-    public boolean containsMaterial(String id) {
+    public synchronized boolean containsMaterial(String id) {
         return id != null && materials.containsKey(id);
     }
 
-    public Material createCustomPBRMaterial(String name, String hexColor, float metallic, float roughness) {
+    public synchronized Material createCustomPBRMaterial(String name, String hexColor, float metallic, float roughness) {
         String id = "mat_custom_" + System.currentTimeMillis();
         Material customMat = new Material(id, name != null ? name : "Custom Material", hexColor);
         customMat.setMetallic(metallic);
@@ -121,7 +121,7 @@ public class MaterialManager {
         return customMat;
     }
 
-    public Map<String, Material> getAllMaterials() {
-        return materials;
+    public synchronized Map<String, Material> getAllMaterials() {
+        return new HashMap<>(materials);
     }
 }
