@@ -7,6 +7,10 @@ import android.opengl.Matrix;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
 
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
@@ -193,15 +197,48 @@ public class StudioGLRenderer implements GLSurfaceView.Renderer {
             GLES20.glUniform3f(uAmbientColorHandle, 0.3f, 0.3f, 0.35f);
         }
 
-        // Render Ground Grid
+        // 1. Render Ground Grid (Opaque pass)
         drawGrid(viewMatrix, projMatrix);
 
-        // Render Active 3D Scene Graph Nodes
+        // 2. Render Active 3D Scene Graph Nodes (Sorting translucent nodes for correct blending)
         Scene scene = sceneManager.getActiveScene();
         if (scene != null) {
-            for (SceneObject obj : scene.getObjects()) {
-                drawSceneObject(obj, viewMatrix, projMatrix, null);
+            List<SceneObject> flatList = scene.getFlatObjectList();
+            List<RenderTask> opaqueTasks = new ArrayList<>();
+            List<RenderTask> translucentTasks = new ArrayList<>();
+
+            for (SceneObject obj : flatList) {
+                if (obj.getMesh() == null || !obj.isVisible()) continue;
+                
+                float[] modelMatrix = obj.getTransform().getWorldMatrix(null);
+                boolean isTranslucent = obj.getMaterial() != null && obj.getMaterial().getOpacity() < 1.0f;
+                
+                RenderTask task = new RenderTask(obj, modelMatrix);
+                if (isTranslucent) {
+                    // Calculate distance to camera for back-to-front depth sorting
+                    float dx = obj.getTransform().getPx() - cameraEye[0];
+                    float dy = obj.getTransform().getPy() - cameraEye[1];
+                    float dz = obj.getTransform().getPz() - cameraEye[2];
+                    task.distanceToCamera = (float) Math.sqrt(dx*dx + dy*dy + dz*dz);
+                    translucentTasks.add(task);
+                } else {
+                    opaqueTasks.add(task);
+                }
             }
+
+            // Opaque Pass (Depth Writing Enabled)
+            GLES20.glDepthMask(true);
+            for (RenderTask task : opaqueTasks) {
+                drawTask(task, viewMatrix, projMatrix);
+            }
+
+            // Depth-sorted Translucent Pass (Depth Writing Disabled)
+            Collections.sort(translucentTasks, (t1, t2) -> Float.compare(t2.distanceToCamera, t1.distanceToCamera));
+            GLES20.glDepthMask(false);
+            for (RenderTask task : translucentTasks) {
+                drawTask(task, viewMatrix, projMatrix);
+            }
+            GLES20.glDepthMask(true); // Re-enable depth write
         }
     }
 
@@ -226,66 +263,55 @@ public class StudioGLRenderer implements GLSurfaceView.Renderer {
         GLES20.glDisableVertexAttribArray(aPositionHandle);
     }
 
-    private void drawSceneObject(SceneObject obj, float[] viewMatrix, float[] projMatrix, float[] parentWorldMatrix) {
-        if (!obj.isVisible()) return;
-
+    private void drawTask(RenderTask task, float[] viewMatrix, float[] projMatrix) {
+        SceneObject obj = task.obj;
         Mesh mesh = obj.getMesh();
-        Transform transform = obj.getTransform();
-        float[] modelMatrix = transform.getWorldMatrix(parentWorldMatrix);
+        float[] modelMatrix = task.modelMatrix;
 
-        if (mesh != null) {
-            Matrix.multiplyMM(mvpMatrix, 0, viewMatrix, 0, modelMatrix, 0);
-            Matrix.multiplyMM(mvpMatrix, 0, projMatrix, 0, mvpMatrix, 0);
+        Matrix.multiplyMM(mvpMatrix, 0, viewMatrix, 0, modelMatrix, 0);
+        Matrix.multiplyMM(mvpMatrix, 0, projMatrix, 0, mvpMatrix, 0);
 
-            GLES20.glUniformMatrix4fv(uMVPMatrixHandle, 1, false, mvpMatrix, 0);
-            GLES20.glUniformMatrix4fv(uModelMatrixHandle, 1, false, modelMatrix, 0);
+        GLES20.glUniformMatrix4fv(uMVPMatrixHandle, 1, false, mvpMatrix, 0);
+        GLES20.glUniformMatrix4fv(uModelMatrixHandle, 1, false, modelMatrix, 0);
 
-            // Bind Material Uniforms
-            Material mat = obj.getMaterial();
-            if (mat != null) {
-                float[] color = mat.getBaseColorRGBA();
-                GLES20.glUniform4f(uColorHandle, color[0], color[1], color[2], color[3]);
-                GLES20.glUniform1f(uMetallicHandle, mat.getMetallic());
-                GLES20.glUniform1f(uRoughnessHandle, mat.getRoughness());
-                
-                float[] emissiveRGB = mat.getEmissionRGB();
-                GLES20.glUniform4f(uEmissionHandle, emissiveRGB[0], emissiveRGB[1], emissiveRGB[2], mat.getEmissionIntensity());
-            } else {
-                GLES20.glUniform4f(uColorHandle, 0.8f, 0.8f, 0.8f, 1f);
-                GLES20.glUniform1f(uMetallicHandle, 0.1f);
-                GLES20.glUniform1f(uRoughnessHandle, 0.5f);
-                GLES20.glUniform4f(uEmissionHandle, 0f, 0f, 0f, 0f);
-            }
-
-            GLES20.glUniform1f(uIsSelectedHandle, obj.isSelected() ? 1.0f : 0.0f);
-
-            // Bind Buffers & Draw Mesh
-            if (mesh.getVertexBuffer() != null) {
-                GLES20.glEnableVertexAttribArray(aPositionHandle);
-                GLES20.glVertexAttribPointer(aPositionHandle, 3, GLES20.GL_FLOAT, false, 0, mesh.getVertexBuffer());
-            }
-
-            if (mesh.getNormalBuffer() != null) {
-                GLES20.glEnableVertexAttribArray(aNormalHandle);
-                GLES20.glVertexAttribPointer(aNormalHandle, 3, GLES20.GL_FLOAT, false, 0, mesh.getNormalBuffer());
-            }
-
-            if (mesh.getIndexBuffer() != null) {
-                GLES20.glDrawElements(GLES20.GL_TRIANGLES, mesh.getIndices().length, GLES20.GL_UNSIGNED_SHORT, mesh.getIndexBuffer());
-            } else if (mesh.getVertexBuffer() != null) {
-                GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, mesh.getVertexCount());
-            }
-
-            GLES20.glDisableVertexAttribArray(aPositionHandle);
-            GLES20.glDisableVertexAttribArray(aNormalHandle);
+        // Bind Material Uniforms
+        Material mat = obj.getMaterial();
+        if (mat != null) {
+            float[] color = mat.getBaseColorRGBA();
+            GLES20.glUniform4f(uColorHandle, color[0], color[1], color[2], color[3]);
+            GLES20.glUniform1f(uMetallicHandle, mat.getMetallic());
+            GLES20.glUniform1f(uRoughnessHandle, mat.getRoughness());
+            
+            float[] emissiveRGB = mat.getEmissionRGB();
+            GLES20.glUniform4f(uEmissionHandle, emissiveRGB[0], emissiveRGB[1], emissiveRGB[2], mat.getEmissionIntensity());
+        } else {
+            GLES20.glUniform4f(uColorHandle, 0.8f, 0.8f, 0.8f, 1.0f);
+            GLES20.glUniform1f(uMetallicHandle, 0.1f);
+            GLES20.glUniform1f(uRoughnessHandle, 0.5f);
+            GLES20.glUniform4f(uEmissionHandle, 0f, 0f, 0f, 0f);
         }
 
-        // Recursively Render Scene Graph Children Nodes
-        if (obj.getChildren() != null) {
-            for (SceneObject child : obj.getChildren()) {
-                drawSceneObject(child, viewMatrix, projMatrix, modelMatrix);
-            }
+        GLES20.glUniform1f(uIsSelectedHandle, obj.isSelected() ? 1.0f : 0.0f);
+
+        // Bind Buffers & Draw Mesh
+        if (mesh.getVertexBuffer() != null) {
+            GLES20.glEnableVertexAttribArray(aPositionHandle);
+            GLES20.glVertexAttribPointer(aPositionHandle, 3, GLES20.GL_FLOAT, false, 0, mesh.getVertexBuffer());
         }
+
+        if (mesh.getNormalBuffer() != null) {
+            GLES20.glEnableVertexAttribArray(aNormalHandle);
+            GLES20.glVertexAttribPointer(aNormalHandle, 3, GLES20.GL_FLOAT, false, 0, mesh.getNormalBuffer());
+        }
+
+        if (mesh.getIndexBuffer() != null) {
+            GLES20.glDrawElements(GLES20.GL_TRIANGLES, mesh.getIndices().length, GLES20.GL_UNSIGNED_SHORT, mesh.getIndexBuffer());
+        } else if (mesh.getVertexBuffer() != null) {
+            GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, mesh.getVertexCount());
+        }
+
+        GLES20.glDisableVertexAttribArray(aPositionHandle);
+        GLES20.glDisableVertexAttribArray(aNormalHandle);
     }
 
     private int loadShader(int type, String shaderCode) {
@@ -293,5 +319,16 @@ public class StudioGLRenderer implements GLSurfaceView.Renderer {
         GLES20.glShaderSource(shader, shaderCode);
         GLES20.glCompileShader(shader);
         return shader;
+    }
+
+    private static class RenderTask {
+        final SceneObject obj;
+        final float[] modelMatrix;
+        float distanceToCamera = 0.0f;
+
+        RenderTask(SceneObject obj, float[] modelMatrix) {
+            this.obj = obj;
+            this.modelMatrix = modelMatrix;
+        }
     }
 }
