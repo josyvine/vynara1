@@ -32,8 +32,9 @@ public class SettingsFragment extends Fragment {
     private Spinner spinnerModel;
     private Spinner spinnerRenderQuality;
 
-    // Flag to prevent programmatic dataset changes from triggering accidental selection writes
-    private boolean isUpdatingModels = false;
+    // CRITICAL FIX: Initialize flag as true to block all accidental, system-triggered 
+    // selection events during the initial layout startup passes before live models load.
+    private boolean isUpdatingModels = true;
 
     @Nullable
     @Override
@@ -51,10 +52,9 @@ public class SettingsFragment extends Fragment {
         spinnerRenderQuality = view.findViewById(R.id.spinner_settings_render_quality);
 
         final List<String> modelList = new ArrayList<>();
-        modelList.add("gemini-2.5-flash");
-        modelList.add("gemini-2.5-pro");
-        modelList.add("gemini-1.5-flash");
-        modelList.add("gemini-1.5-pro");
+        modelList.add("gemini-3.5-flash");
+        modelList.add("gemini-3.1-flash-lite");
+        modelList.add("gemini-3.1-pro");
 
         final ArrayAdapter<String> modelAdapter = new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_item, modelList);
         modelAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
@@ -74,6 +74,7 @@ public class SettingsFragment extends Fragment {
             } else {
                 tvStatus.setText("● Disconnected");
                 tvStatus.setTextColor(0xFFFF5252);
+                isUpdatingModels = false; // Allow manual selection if disconnected
             }
 
             String currentSelectedModel = keyMgr.getSelectedModel();
@@ -189,13 +190,16 @@ public class SettingsFragment extends Fragment {
             Toast.makeText(getContext(), "Fetching live models from Google Gemini API...", Toast.LENGTH_SHORT).show();
         }
 
+        // Lock user actions during async network transactions
+        isUpdatingModels = true;
+
         new GeminiApiClient().fetchModels(apiKey.trim(), new GeminiApiClient.ApiCallback<List<AIModel>>() {
             @Override
             public void onSuccess(List<AIModel> result) {
-                if (getContext() == null || result == null || result.isEmpty()) return;
-                
-                // Block UI-triggered save actions during list reconstruction
-                isUpdatingModels = true;
+                if (getContext() == null || result == null || result.isEmpty()) {
+                    isUpdatingModels = false;
+                    return;
+                }
                 
                 modelList.clear();
                 for (AIModel m : result) {
@@ -212,7 +216,7 @@ public class SettingsFragment extends Fragment {
                     keyMgr.saveSelectedModel(modelList.get(0));
                 }
 
-                // Safely clear the update flag after the layout and selection queues have executed
+                // Safely clear the update flag after the programmatic layout selection is completed
                 spinnerModel.post(() -> isUpdatingModels = false);
 
                 if (showToast && getContext() != null) {
@@ -222,6 +226,7 @@ public class SettingsFragment extends Fragment {
 
             @Override
             public void onError(String errorMessage) {
+                isUpdatingModels = false; // Release lock so user can interact if call failed
                 if (showToast && getContext() != null) {
                     Toast.makeText(getContext(), "Failed to fetch live models: " + errorMessage, Toast.LENGTH_LONG).show();
                 }
