@@ -32,6 +32,9 @@ public class SettingsFragment extends Fragment {
     private Spinner spinnerModel;
     private Spinner spinnerRenderQuality;
 
+    // Flag to prevent programmatic dataset changes from triggering accidental selection writes
+    private boolean isUpdatingModels = false;
+
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
@@ -82,6 +85,9 @@ public class SettingsFragment extends Fragment {
             spinnerModel.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
                 @Override
                 public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                    if (isUpdatingModels) {
+                        return; // Discard auto-selection events during async list reload
+                    }
                     if (position >= 0 && position < modelList.size()) {
                         String selected = modelList.get(position);
                         keyMgr.saveSelectedModel(selected);
@@ -187,6 +193,10 @@ public class SettingsFragment extends Fragment {
             @Override
             public void onSuccess(List<AIModel> result) {
                 if (getContext() == null || result == null || result.isEmpty()) return;
+                
+                // Block UI-triggered save actions during list reconstruction
+                isUpdatingModels = true;
+                
                 modelList.clear();
                 for (AIModel m : result) {
                     modelList.add(m.getName());
@@ -201,6 +211,9 @@ public class SettingsFragment extends Fragment {
                     spinnerModel.setSelection(0);
                     keyMgr.saveSelectedModel(modelList.get(0));
                 }
+
+                // Safely clear the update flag after the layout and selection queues have executed
+                spinnerModel.post(() -> isUpdatingModels = false);
 
                 if (showToast && getContext() != null) {
                     Toast.makeText(getContext(), "Fetched " + result.size() + " live models from Google API!", Toast.LENGTH_SHORT).show();
