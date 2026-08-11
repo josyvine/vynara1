@@ -32,6 +32,7 @@ public class ProjectsFragment extends Fragment {
     private final List<ProjectItem> displayedProjects = new ArrayList<>();
     private final List<Project> realProjects = new ArrayList<>();
     private EditText etSearch;
+    private Button btnFirstProject;
     private ProjectRuntime runtime;
 
     @Nullable
@@ -53,6 +54,7 @@ public class ProjectsFragment extends Fragment {
 
         rvProjects = view.findViewById(R.id.rv_projects);
         etSearch = view.findViewById(R.id.et_search_projects);
+        btnFirstProject = view.findViewById(R.id.btn_create_first_project);
 
         rvProjects.setLayoutManager(new LinearLayoutManager(getContext()));
         adapter = new ProjectAdapter(projectItem -> {
@@ -97,7 +99,6 @@ public class ProjectsFragment extends Fragment {
             });
         }
 
-        Button btnFirstProject = view.findViewById(R.id.btn_create_first_project);
         if (btnFirstProject != null) {
             btnFirstProject.setOnClickListener(v -> {
                 if (getActivity() instanceof MainActivity) {
@@ -125,12 +126,20 @@ public class ProjectsFragment extends Fragment {
                 ProjectItem item = new ProjectItem(p.getId(), p.getTitle(), p.getUserPrompt(), p.getStatus(), subInfo);
                 displayedProjects.add(item);
             }
-            view.findViewById(R.id.layout_empty_projects_state).setVisibility(View.GONE);
-            rvProjects.setVisibility(View.VISIBLE);
+            if (rvProjects != null) {
+                rvProjects.setVisibility(View.VISIBLE);
+            }
+            if (btnFirstProject != null) {
+                btnFirstProject.setVisibility(View.GONE);
+            }
         } else {
-            // Display empty layout if zero projects are registered
-            view.findViewById(R.id.layout_empty_projects_state).setVisibility(View.VISIBLE);
-            rvProjects.setVisibility(View.GONE);
+            // Display empty layout state if zero projects are registered
+            if (rvProjects != null) {
+                rvProjects.setVisibility(View.GONE);
+            }
+            if (btnFirstProject != null) {
+                btnFirstProject.setVisibility(View.VISIBLE);
+            }
         }
 
         adapter.setProjects(displayedProjects);
