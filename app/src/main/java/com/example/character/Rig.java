@@ -13,8 +13,8 @@ public class Rig {
     }
 
     /**
-     * Phase 9 Alignment: Solves Inverse Kinematics targets for humanoid and quadruped
-     * limbs using distinct upper, lower, and end bone chains.
+     * Phase 9 Alignment: Solves Inverse Kinematics targets for humanoid, quadruped,
+     * and avian wings using distinct upper, lower, and end bone chains.
      */
     public void setIKTarget(String limb, float x, float y, float z) {
         if (skeleton == null || limb == null) return;
@@ -76,6 +76,19 @@ public class Rig {
                     skeleton.getBoneBySemanticName("REAR_RIGHT_UPPER_LEG"),
                     skeleton.getBoneBySemanticName("REAR_RIGHT_LOWER_LEG"),
                     skeleton.getBoneBySemanticName("REAR_RIGHT_FOOT"),
+                    x, y, z, px, py, pz);
+        } else if ("left_wing".equals(key)) {
+            // Avian wing assembly IK chain
+            IKSolver.solveTwoBoneIKWithPole(
+                    skeleton.getBoneBySemanticName("LEFT_WING_ARM"),
+                    skeleton.getBoneBySemanticName("LEFT_WING_TIP"),
+                    skeleton.getBoneBySemanticName("TAIL_FEATHERS"), // Fallback chain end
+                    x, y, z, px, py, pz);
+        } else if ("right_wing".equals(key)) {
+            IKSolver.solveTwoBoneIKWithPole(
+                    skeleton.getBoneBySemanticName("RIGHT_WING_ARM"),
+                    skeleton.getBoneBySemanticName("RIGHT_WING_TIP"),
+                    skeleton.getBoneBySemanticName("TAIL_FEATHERS"),
                     x, y, z, px, py, pz);
         }
     }
