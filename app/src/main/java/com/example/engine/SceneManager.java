@@ -53,6 +53,7 @@ public class SceneManager {
         String idToRemove = selectedObject.getId();
         activeScene.removeObject(idToRemove);
         selectedObject = null;
+        updateWorldTransforms();
         return true;
     }
 
@@ -66,39 +67,32 @@ public class SceneManager {
         String newId = target.getId() + "_copy_" + System.currentTimeMillis();
         String newName = target.getName() + " (Copy)";
 
-        SceneObject copy = new SceneObject(newId, newName, target.getSemanticType(), target.getMesh(), target.getMaterial());
+        // Deep copy node and its children sub-graph
+        SceneObject copy = target.cloneNode(newId, newName);
         
-        // Copy transform values
+        // Slightly offset the duplicated root transform to distinguish it from the original
         if (target.getTransform() != null) {
             copy.getTransform().setPosition(
-                    target.getTransform().getPx() + 0.5f, // Slightly offset duplicate
+                    target.getTransform().getPx() + 0.5f,
                     target.getTransform().getPy(),
                     target.getTransform().getPz() + 0.5f
-            );
-            copy.getTransform().setRotation(
-                    target.getTransform().getRx(),
-                    target.getTransform().getRy(),
-                    target.getTransform().getRz()
-            );
-            copy.getTransform().setScale(
-                    target.getTransform().getSx(),
-                    target.getTransform().getSy(),
-                    target.getTransform().getSz()
             );
         }
 
         activeScene.addObject(copy);
         selectObject(copy);
+        updateWorldTransforms();
         return copy;
     }
 
     /**
      * Binds a child SceneObject to a new parent SceneObject in the scene graph.
+     * Recalculates matrices to align with the new parent node.
      */
     public boolean parentObject(SceneObject child, SceneObject parent) {
         if (child == null || parent == null || child.equals(parent)) return false;
 
-        // Unparent from previous parent if exists
+        // Unparent from previous parent if it exists
         if (child.getParent() != null) {
             child.getParent().getChildren().remove(child);
         } else {
@@ -106,6 +100,7 @@ public class SceneManager {
         }
 
         parent.addChild(child);
+        updateWorldTransforms();
         return true;
     }
 
@@ -119,6 +114,7 @@ public class SceneManager {
         parent.getChildren().remove(child);
         
         activeScene.addObject(child);
+        updateWorldTransforms();
         return true;
     }
 
@@ -130,6 +126,22 @@ public class SceneManager {
     public List<SceneObject> getAllObjects() {
         if (activeScene == null) return new ArrayList<>();
         return activeScene.getObjects();
+    }
+
+    public void updateWorldTransforms() {
+        if (activeScene != null) {
+            for (SceneObject root : activeScene.getObjects()) {
+                updateTransformsRecursively(root, null);
+            }
+        }
+    }
+
+    private void updateTransformsRecursively(SceneObject node, float[] parentWorldMatrix) {
+        if (node == null) return;
+        float[] worldMat = node.getTransform().getWorldMatrix(parentWorldMatrix);
+        for (SceneObject child : node.getChildren()) {
+            updateTransformsRecursively(child, worldMat);
+        }
     }
 
     public void clearScene() {
