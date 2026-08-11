@@ -45,6 +45,19 @@ public class AnimationPlayer {
                 .addKeyframe(new Keyframe(0.9f, 0f, 0f, 0f, 0f, 0f, 0f))
                 .addKeyframe(new Keyframe(1.2f, 0f, 0f, 0f, -25f, 0f, 0f));
 
+        // Adding Calf Tracks for correct knee flexion
+        AnimationTrack lCalfTrack = new AnimationTrack("LEFT_CALF")
+                .addKeyframe(new Keyframe(0.0f, 0f, 0f, 0f, 0f, 0f, 0f))
+                .addKeyframe(new Keyframe(0.3f, 0f, 0f, 0f, 35f, 0f, 0f)) // Bend knee
+                .addKeyframe(new Keyframe(0.6f, 0f, 0f, 0f, 0f, 0f, 0f))
+                .addKeyframe(new Keyframe(1.2f, 0f, 0f, 0f, 0f, 0f, 0f));
+
+        AnimationTrack rCalfTrack = new AnimationTrack("RIGHT_CALF")
+                .addKeyframe(new Keyframe(0.0f, 0f, 0f, 0f, 0f, 0f, 0f))
+                .addKeyframe(new Keyframe(0.6f, 0f, 0f, 0f, 0f, 0f, 0f))
+                .addKeyframe(new Keyframe(0.9f, 0f, 0f, 0f, 35f, 0f, 0f)) // Bend knee
+                .addKeyframe(new Keyframe(1.2f, 0f, 0f, 0f, 0f, 0f, 0f));
+
         AnimationTrack lArmTrack = new AnimationTrack("LEFT_UPPER_ARM")
                 .addKeyframe(new Keyframe(0.0f, 0f, 0f, 0f, -15f, 0f, 0f))
                 .addKeyframe(new Keyframe(0.6f, 0f, 0f, 0f, 15f, 0f, 0f))
@@ -55,7 +68,8 @@ public class AnimationPlayer {
                 .addKeyframe(new Keyframe(0.6f, 0f, 0f, 0f, -15f, 0f, 0f))
                 .addKeyframe(new Keyframe(1.2f, 0f, 0f, 0f, 15f, 0f, 0f));
 
-        walk.addTrack(lThighTrack).addTrack(rThighTrack).addTrack(lArmTrack).addTrack(rArmTrack);
+        walk.addTrack(lThighTrack).addTrack(rThighTrack).addTrack(lCalfTrack).addTrack(rCalfTrack)
+            .addTrack(lArmTrack).addTrack(rArmTrack);
         clipLibrary.put("walk", walk);
 
         // 3. Run Animation Clip (Fast Gait Cycle)
@@ -95,9 +109,11 @@ public class AnimationPlayer {
 
     public void pause() { isPlaying = false; }
     public void resume() { isPlaying = true; }
+    
     public void stop() {
         isPlaying = false;
         currentTimeSeconds = 0f;
+        resetSkeletonToDefaultPose();
     }
 
     public void seek(float timeSeconds) {
@@ -121,6 +137,19 @@ public class AnimationPlayer {
         }
 
         evaluateAndApplyKeyframes();
+    }
+
+    /**
+     * Resets all skeletal bone nodes to their default transform orientations.
+     */
+    private void resetSkeletonToDefaultPose() {
+        if (skeleton == null) return;
+        for (Bone bone : skeleton.getAllBones()) {
+            if (bone != null && bone.getLocalTransform() != null) {
+                bone.getLocalTransform().reset();
+            }
+        }
+        skeleton.updateWorldTransforms();
     }
 
     /**
