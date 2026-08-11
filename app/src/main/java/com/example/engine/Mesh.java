@@ -106,6 +106,35 @@ public class Mesh {
         }
     }
 
+    /**
+     * Dynamically binds raw skeletal float arrays and allocates Direct Native NIO 
+     * buffers on the fly to support GPU-accelerated vertex skinning deformations.
+     */
+    public void setSkinningData(float[] boneWeights, float[] boneIndices) {
+        this.boneWeights = boneWeights;
+        this.boneIndices = boneIndices;
+
+        if (boneWeights != null && boneWeights.length > 0) {
+            ByteBuffer bwbb = ByteBuffer.allocateDirect(boneWeights.length * 4);
+            bwbb.order(ByteOrder.nativeOrder());
+            boneWeightBuffer = bwbb.asFloatBuffer();
+            boneWeightBuffer.put(boneWeights);
+            boneWeightBuffer.position(0);
+        } else {
+            boneWeightBuffer = null;
+        }
+
+        if (boneIndices != null && boneIndices.length > 0) {
+            ByteBuffer bibb = ByteBuffer.allocateDirect(boneIndices.length * 4);
+            bibb.order(ByteOrder.nativeOrder());
+            boneIndexBuffer = bibb.asFloatBuffer();
+            boneIndexBuffer.put(boneIndices);
+            boneIndexBuffer.position(0);
+        } else {
+            boneIndexBuffer = null;
+        }
+    }
+
     public void recalculateNormals() {
         if (vertices == null || vertices.length < 9) return;
 
@@ -134,7 +163,7 @@ public class Mesh {
 
                 normals[idx0] = nx; normals[idx0 + 1] = ny; normals[idx0 + 2] = nz;
                 normals[idx1] = nx; normals[idx1 + 1] = ny; normals[idx1 + 2] = nz;
-                normals[idx2] = nx; normals[idx2 + 1] = ny; normals[idx2 + 2] = nz;
+                normals[idx2] = nx; normals[idx2 + 2] = nz;
             }
         } else {
             // Default flat normals facing Z
