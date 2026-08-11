@@ -79,6 +79,19 @@ public class VynaraLogger {
     
     public static void validation(LogLevel level, String msg) { log(LogTag.VALIDATION, level, msg); }
 
+    // General purpose error logging methods required by background execution and orchestration layers
+    public static void e(String msg) {
+        log(LogTag.SYSTEM, LogLevel.ERROR, msg);
+    }
+
+    public static void e(String msg, Throwable throwable) {
+        if (throwable != null) {
+            log(LogTag.SYSTEM, LogLevel.ERROR, msg + " | Exception: " + throwable.getLocalizedMessage());
+        } else {
+            log(LogTag.SYSTEM, LogLevel.ERROR, msg);
+        }
+    }
+
     private static synchronized void log(LogTag tag, LogLevel level, String message) {
         LogEntry entry = new LogEntry(tag, level, message);
 
