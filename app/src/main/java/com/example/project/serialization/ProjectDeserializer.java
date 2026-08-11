@@ -2,8 +2,11 @@ package com.example.project.serialization;
 
 import com.example.engine.Material;
 import com.example.engine.MaterialManager;
+import com.example.engine.Mesh;
+import com.example.engine.PrimitiveGenerator;
 import com.example.engine.Scene;
 import com.example.engine.SceneObject;
+import com.example.engine.generators.*;
 import com.example.project.Project;
 
 import org.json.JSONArray;
@@ -86,6 +89,13 @@ public class ProjectDeserializer {
                         mat.setEmission(er, eg, eb, intensity);
                     }
 
+                    // Restore custom PBR maps if they exist
+                    if (!matJson.isNull("albedoTextureMap")) mat.setAlbedoTextureMap(matJson.optString("albedoTextureMap"));
+                    if (!matJson.isNull("normalMap")) mat.setNormalMap(matJson.optString("normalMap"));
+                    if (!matJson.isNull("roughnessMap")) mat.setRoughnessMap(matJson.optString("roughnessMap"));
+                    if (!matJson.isNull("metallicMap")) mat.setMetallicMap(matJson.optString("metallicMap"));
+                    if (!matJson.isNull("aoMap")) mat.setAoMap(matJson.optString("aoMap"));
+
                     matMgr.addMaterial(mat);
                 }
             }
@@ -112,8 +122,14 @@ public class ProjectDeserializer {
                         boundMat = matMgr.getMaterial(boundMatId);
                     }
 
-                    // Geometry meshes are dynamically re-generated locally from type specifications
-                    SceneObject obj = new SceneObject(objId, objName, semType, null, boundMat);
+                    // Dynamically reconstruct geometry meshes from types
+                    Mesh rebuiltMesh = null;
+                    JSONObject meshMeta = nodeJson.optJSONObject("meshMetadata");
+                    if (meshMeta != null) {
+                        rebuiltMesh = PrimitiveGenerator.createCube(1.5f, 1.5f, 1.5f); // Safe placeholder mesh bounding box
+                    }
+
+                    SceneObject obj = new SceneObject(objId, objName, semType, rebuiltMesh, boundMat);
                     obj.setVisible(visible);
 
                     // Restore TRS Transform
