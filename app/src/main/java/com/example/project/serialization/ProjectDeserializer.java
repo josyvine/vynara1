@@ -1,5 +1,6 @@
 package com.example.project.serialization;
 
+import com.example.character.CharacterSpecification;
 import com.example.engine.Material;
 import com.example.engine.MaterialManager;
 import com.example.engine.Mesh;
@@ -122,11 +123,72 @@ public class ProjectDeserializer {
                         boundMat = matMgr.getMaterial(boundMatId);
                     }
 
-                    // Dynamically reconstruct geometry meshes from types
-                    Mesh rebuiltMesh = null;
+                    // Recover original bounding box dimensions from serialized metadata
+                    float width = 1.5f, height = 1.5f, depth = 1.5f;
                     JSONObject meshMeta = nodeJson.optJSONObject("meshMetadata");
                     if (meshMeta != null) {
-                        rebuiltMesh = PrimitiveGenerator.createCube(1.5f, 1.5f, 1.5f); // Safe placeholder mesh bounding box
+                        JSONArray minArr = meshMeta.optJSONArray("minBounds");
+                        JSONArray maxArr = meshMeta.optJSONArray("maxBounds");
+                        if (minArr != null && maxArr != null && minArr.length() >= 3 && maxArr.length() >= 3) {
+                            width = (float) (maxArr.optDouble(0) - minArr.optDouble(0));
+                            height = (float) (maxArr.optDouble(1) - minArr.optDouble(1));
+                            depth = (float) (maxArr.optDouble(2) - minArr.optDouble(2));
+                        }
+                    }
+
+                    // Reconstruct procedural mesh geometries using dynamic CAD recipes
+                    Mesh rebuiltMesh = null;
+                    String cleanSemType = semType.toUpperCase().trim();
+                    String cleanName = objName.toLowerCase().trim();
+
+                    if ("PRIMITIVE".equals(cleanSemType)) {
+                        float radius = width / 2.0f;
+                        if (cleanName.contains("sphere")) {
+                            rebuiltMesh = PrimitiveGenerator.createSphere(radius, 16, 16);
+                        } else if (cleanName.contains("cylinder")) {
+                            rebuiltMesh = PrimitiveGenerator.createCylinder(radius, height, 16);
+                        } else if (cleanName.contains("plane")) {
+                            rebuiltMesh = PrimitiveGenerator.createPlane(width, depth);
+                        } else if (cleanName.contains("cone")) {
+                            rebuiltMesh = PrimitiveGenerator.createCylinder(radius, height, 3);
+                        } else if (cleanName.contains("torus")) {
+                            rebuiltMesh = PrimitiveGenerator.createTorus(width * 0.4f, width * 0.1f, 16, 16);
+                        } else {
+                            rebuiltMesh = PrimitiveGenerator.createCube(width, height, depth);
+                        }
+                    } else if ("SOFA".equals(cleanSemType)) {
+                        SceneObject tempSofa = SofaGenerator.generateSofa(objId, objName, matMgr);
+                        if (tempSofa != null) rebuiltMesh = tempSofa.getMesh();
+                    } else if ("HOUSE".equals(cleanSemType)) {
+                        SceneObject tempHouse = HouseGenerator.generateHouse(objId, objName, matMgr);
+                        if (tempHouse != null) rebuiltMesh = tempHouse.getMesh();
+                    } else if ("POOL".equals(cleanSemType)) {
+                        SceneObject tempPool = PoolGenerator.generatePool(objId, objName, matMgr);
+                        if (tempPool != null) rebuiltMesh = tempPool.getMesh();
+                    } else if ("TABLE".equals(cleanSemType)) {
+                        SceneObject tempTable = TableGenerator.generateTable(objId, objName, matMgr);
+                        if (tempTable != null) rebuiltMesh = tempTable.getMesh();
+                    } else if ("CHAIR".equals(cleanSemType)) {
+                        SceneObject tempChair = ChairGenerator.generateChair(objId, objName, matMgr);
+                        if (tempChair != null) rebuiltMesh = tempChair.getMesh();
+                    } else if ("VILLA".equals(cleanSemType)) {
+                        SceneObject tempVilla = VillaGenerator.generateVilla(objId, objName, matMgr);
+                        if (tempVilla != null) rebuiltMesh = tempVilla.getMesh();
+                    } else if ("TREE".equals(cleanSemType)) {
+                        SceneObject tempTree = TreeGenerator.generateTree(objId, objName, matMgr);
+                        if (tempTree != null) rebuiltMesh = tempTree.getMesh();
+                    } else if ("CHARACTER".equals(cleanSemType)) {
+                        SceneObject tempHumanoid = HumanoidGenerator.generateHumanoidMesh(objId, new CharacterSpecification("HUMANOID", objName), matMgr);
+                        if (tempHumanoid != null) rebuiltMesh = tempHumanoid.getMesh();
+                    } else if ("CREATURE".equals(cleanSemType)) {
+                        String species = cleanName.contains("bird") ? "bird" : "dog";
+                        SceneObject tempCreature = CreatureGenerator.generateCreatureMesh(objId, new CharacterSpecification(species, objName), matMgr);
+                        if (tempCreature != null) rebuiltMesh = tempCreature.getMesh();
+                    }
+
+                    // Direct fallback if specific recipe generation fails
+                    if (rebuiltMesh == null) {
+                        rebuiltMesh = PrimitiveGenerator.createCube(width, height, depth);
                     }
 
                     SceneObject obj = new SceneObject(objId, objName, semType, rebuiltMesh, boundMat);
