@@ -3,12 +3,14 @@ package com.example.ai;
 import com.example.ai.protocol.AIToolCall;
 import com.example.ai.protocol.AIProductionPlan;
 import com.example.ai.protocol.AIProductionRequest;
+import com.example.ai.validation.PlanValidator;
 import com.example.knowledge.KnowledgeEntry;
 import com.example.knowledge.KnowledgeManager;
 import com.example.tasks.ProductionPlan;
 import com.example.tasks.TaskGraph;
 import com.example.tasks.TaskNode;
 import com.example.tools.ToolOperation;
+import com.example.tools.ToolRegistry;
 
 import org.json.JSONArray;
 
@@ -163,12 +165,17 @@ public class PromptInterpreter {
             return createProductionPlan(request.getUserPrompt(), request.getStyle(), request.getTargetEngine(), request.getReferenceImageUris());
         }
 
+        // ENFORCE CONTRACT: Run raw Gemini tool calls through PlanValidator to resolve capabilities
+        ToolRegistry toolRegistry = new ToolRegistry();
+        PlanValidator planValidator = new PlanValidator(toolRegistry);
+        List<AIToolCall> validatedToolCalls = planValidator.validateAndMap(toolCalls);
+
         // Keep track of the last geometry creation task to build local modifiers dependency mapping
         String lastGeometryTaskId = null;
         Map<String, TaskNode> taskNodeMap = new HashMap<>();
 
-        for (int i = 0; i < toolCalls.size(); i++) {
-            AIToolCall call = toolCalls.get(i);
+        for (int i = 0; i < validatedToolCalls.size(); i++) {
+            AIToolCall call = validatedToolCalls.get(i);
             String defaultTaskId = "task_ai_" + (i + 1);
             
             ToolOperation op = new ToolOperation(call.getToolId());
