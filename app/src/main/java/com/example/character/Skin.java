@@ -20,8 +20,12 @@ public class Skin {
         this.skeleton = skeleton;
         if (mesh != null && mesh.getVertices() != null && mesh.getVertices().length >= 3) {
             bindMeshVerticesToSkeleton(mesh.getVertices());
+            applyToMesh(mesh); // CRITICAL AUTO-RIG BINDER
         } else {
             initMultiBoneSkinning(mesh != null ? mesh.getVertexCount() : 100);
+            if (mesh != null) {
+                applyToMesh(mesh); // CRITICAL AUTO-RIG BINDER FOR SYSTEM DEFAULT
+            }
         }
     }
 
@@ -134,6 +138,45 @@ public class Skin {
         }
 
         normalizeWeights();
+    }
+
+    /**
+     * Flattens the multi-influence vertex skin weights (up to 4 bones per vertex)
+     * and binds them directly to the native GPU and GLTF buffers of the target Mesh.
+     */
+    public void applyToMesh(Mesh mesh) {
+        if (mesh == null || skeleton == null || vertexSkinWeights.isEmpty()) return;
+
+        int vertexCount = vertexSkinWeights.size();
+        float[] flatWeights = new float[vertexCount * MAX_BONE_INFLUENCES_PER_VERTEX];
+        float[] flatIndices = new float[vertexCount * MAX_BONE_INFLUENCES_PER_VERTEX];
+
+        for (int i = 0; i < vertexCount; i++) {
+            List<SkinWeight> weights = vertexSkinWeights.get(i);
+            int size = Math.min(MAX_BONE_INFLUENCES_PER_VERTEX, weights.size());
+
+            for (int j = 0; j < size; j++) {
+                SkinWeight sw = weights.get(j);
+                
+                int boneIndex = 0;
+                Bone targetBone = skeleton.getBoneById(sw.getBoneId());
+                if (targetBone != null) {
+                    boneIndex = skeleton.getBoneIndex(targetBone.getSemanticName());
+                    if (boneIndex < 0) boneIndex = 0;
+                }
+
+                flatWeights[i * MAX_BONE_INFLUENCES_PER_VERTEX + j] = sw.getWeight();
+                flatIndices[i * MAX_BONE_INFLUENCES_PER_VERTEX + j] = (float) boneIndex;
+            }
+
+            // Pad remaining with zeros if vertex has < 4 bone influences
+            for (int j = size; j < MAX_BONE_INFLUENCES_PER_VERTEX; j++) {
+                flatWeights[i * MAX_BONE_INFLUENCES_PER_VERTEX + j] = 0.0f;
+                flatIndices[i * MAX_BONE_INFLUENCES_PER_VERTEX + j] = 0.0f;
+            }
+        }
+
+        mesh.setSkinningData(flatWeights, flatIndices);
     }
 
     /**
